@@ -741,7 +741,7 @@ std::vector<std::string> x11_display_names() {
   int monitor = 0;
   for(int x = 0; x < output; ++x) {
     output_info_t out_info { x11::rr::GetOutputInfo(xdisplay.get(), screenr.get(), screenr->outputs[x]) };
-    if(out_info && out_info->connection == RR_Connected) {
+    if(out_info && out_info->crtc) {
       ++monitor;
     }
   }
