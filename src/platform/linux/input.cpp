@@ -1589,7 +1589,7 @@ namespace platf {
 
     int id;
 
-    auto touchscreen = ((input_raw_t *) input_dev.get())->touch_input.get();
+    auto touchscreen = ((input_raw_t *) input_ctx.get())->touch_input.get();
     if (!touchscreen) {
       return;
     }
