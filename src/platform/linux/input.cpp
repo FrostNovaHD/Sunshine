@@ -1798,6 +1798,24 @@ namespace platf {
       0
     };
 
+    input_absinfo pressure {
+      0,
+      0,
+      1024,
+      0,
+      0,
+      0
+    };
+
+    input_absinfo orientation {
+      0,
+      0,
+      1024,
+      0,
+      0,
+      0
+    };
+
     input_absinfo absx {
       0,
       0,
@@ -1822,6 +1840,10 @@ namespace platf {
     libevdev_enable_event_code(dev.get(), EV_ABS, ABS_MT_TRACKING_ID, &trkid);
     libevdev_enable_event_code(dev.get(), EV_ABS, ABS_MT_POSITION_X, &absx);
     libevdev_enable_event_code(dev.get(), EV_ABS, ABS_MT_POSITION_Y, &absy);
+    libevdev_enable_event_code(dev.get(), EV_ABS, ABS_MT_TOUCH_MAJOR, &absx);
+    libevdev_enable_event_code(dev.get(), EV_ABS, ABS_MT_TOUCH_MINOR, &absx);
+    libevdev_enable_event_code(dev.get(), EV_ABS, ABS_MT_PRESSURE, &pressure);
+    libevdev_enable_event_code(dev.get(), EV_ABS, ABS_MT_ORIENTATION, &orientation);
 
     return dev;
   }
