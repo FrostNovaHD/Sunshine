@@ -1591,7 +1591,7 @@ namespace platf {
     int rotation
 
     if (raw_rotation < 180) {
-      return (int) std::lround(rotation * 100);
+      return (int) std::lround(raw_rotation * 100);
     }
 
     rotation = (int) std::lround(raw_rotation - 360) * 100;
@@ -1670,7 +1670,6 @@ namespace platf {
     libevdev_uinput_write_event(touchscreen, EV_ABS, ABS_MT_PRESSURE, pressure);
     libevdev_uinput_write_event(touchscreen, EV_ABS, ABS_MT_DISTANCE, distance);
     if (touch.rotation != LI_ROT_UNKNOWN) {
-      libevdev_uinput_write_event(touchscreen, EV_ABS, ABS_MT_ORIENTATION, rotation);
       libevdev_uinput_write_event(touchscreen, EV_ABS, ABS_MT_ORIENTATION, orientation);
     }
     libevdev_uinput_write_event(touchscreen, EV_SYN, SYN_REPORT, 0);
