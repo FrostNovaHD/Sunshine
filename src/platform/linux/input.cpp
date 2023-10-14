@@ -1588,7 +1588,7 @@ namespace platf {
 
   int
   standardize_rotation(std::uint16_t raw_rotation) {
-    int rotation
+    int rotation;
 
     if (raw_rotation < 180) {
       return (int) std::lround(raw_rotation * 100);
