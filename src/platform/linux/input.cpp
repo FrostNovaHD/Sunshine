@@ -1639,7 +1639,7 @@ namespace platf {
     float y = touch.y * touch_port.height;
     float major = touch.contactAreaMajor * touch_port.width;
     float minor = touch.contactAreaMinor * touch_port.width;
-    int pressure = touch.pressure * 1024;
+    int pressure = touch.pressureOrDistance * 1024;
 
     auto scaled_x = (int) std::lround((x + touch_port.offset_x) * ((float) target_touch_port.width / (float) touch_port.width));
     auto scaled_y = (int) std::lround((y + touch_port.offset_y) * ((float) target_touch_port.height / (float) touch_port.height));
