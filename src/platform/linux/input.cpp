@@ -1586,6 +1586,19 @@ namespace platf {
     return std::make_unique<client_input_raw_t>(input);
   }
 
+  int
+  standardize_rotation(std::uint16_t raw_rotation) {
+    int rotation
+
+    if (raw_rotation < 180) {
+      return (int) std::lround(rotation * 100);
+    }
+
+    rotation = (int) std::lround(raw_rotation - 360) * 100;
+
+    return rotation;
+  }
+
   /**
    * @brief Sends a touch event to the OS.
    * @param input The client-specific input context.
@@ -1640,6 +1653,7 @@ namespace platf {
     float major = touch.contactAreaMajor * touch_port.width;
     float minor = touch.contactAreaMinor * touch_port.width;
     int pressure = touch.pressureOrDistance * 1024;
+    int orientation = standardize_rotation(touch.rotation);
 
     auto scaled_x = (int) std::lround((x + touch_port.offset_x) * ((float) target_touch_port.width / (float) touch_port.width));
     auto scaled_y = (int) std::lround((y + touch_port.offset_y) * ((float) target_touch_port.height / (float) touch_port.height));
@@ -1654,6 +1668,10 @@ namespace platf {
     libevdev_uinput_write_event(touchscreen, EV_ABS, ABS_MT_TOUCH_MAJOR, major);
     libevdev_uinput_write_event(touchscreen, EV_ABS, ABS_MT_TOUCH_MINOR, minor);
     libevdev_uinput_write_event(touchscreen, EV_ABS, ABS_MT_PRESSURE, pressure);
+    libevdev_uinput_write_event(touchscreen, EV_ABS, ABS_MT_DISTANCE, distance);
+    if (touch.rotation != LI_ROT_UNKNOWN) {
+      libevdev_uinput_write_event(touchscreen, EV_ABS, ABS_MT_ORIENTATION, rotation);
+    }
     libevdev_uinput_write_event(touchscreen, EV_SYN, SYN_REPORT, 0);
   }
 
@@ -1859,7 +1877,7 @@ namespace platf {
     input_absinfo orientation {
       0,
       0,
-      1024,
+      9000,
       0,
       0,
       0
