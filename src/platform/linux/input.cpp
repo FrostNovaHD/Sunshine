@@ -1668,7 +1668,6 @@ namespace platf {
     libevdev_uinput_write_event(touchscreen, EV_ABS, ABS_MT_TOUCH_MAJOR, major);
     libevdev_uinput_write_event(touchscreen, EV_ABS, ABS_MT_TOUCH_MINOR, minor);
     libevdev_uinput_write_event(touchscreen, EV_ABS, ABS_MT_PRESSURE, pressure);
-    libevdev_uinput_write_event(touchscreen, EV_ABS, ABS_MT_DISTANCE, distance);
     if (touch.rotation != LI_ROT_UNKNOWN) {
       libevdev_uinput_write_event(touchscreen, EV_ABS, ABS_MT_ORIENTATION, orientation);
     }
