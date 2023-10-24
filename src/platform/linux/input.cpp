@@ -1640,6 +1640,7 @@ namespace platf {
     //This reports touch events as a type B uinput touchscreen/tablet
     libevdev_uinput_write_event(touchscreen, EV_ABS, ABS_MT_SLOT, touch.pointerId);
     libevdev_uinput_write_event(touchscreen, EV_ABS, ABS_MT_TRACKING_ID, id);
+    libevdev_uinput_write_event(touchscreen, EV_ABS, ABS_MT_TOOL_TYPE, MT_TOOL_FINGER);
     libevdev_uinput_write_event(touchscreen, EV_ABS, ABS_MT_POSITION_X, scaled_x);
     libevdev_uinput_write_event(touchscreen, EV_ABS, ABS_MT_POSITION_Y, scaled_y);
     libevdev_uinput_write_event(touchscreen, EV_SYN, SYN_REPORT, 0);
@@ -1808,6 +1809,15 @@ namespace platf {
       0
     };
 
+    input_absinfo tool {
+      0,
+      0,
+      65536,
+      0,
+      0,
+      0
+    };
+
     input_absinfo absx {
       0,
       0,
@@ -1828,6 +1838,7 @@ namespace platf {
     libevdev_enable_event_type(dev.get(), EV_ABS);
     libevdev_enable_event_code(dev.get(), EV_ABS, ABS_X, &absx);
     libevdev_enable_event_code(dev.get(), EV_ABS, ABS_Y, &absy);
+    libevdev_enable_event_code(dev.get(), EV_ABS, ABS_MT_TOOL_TYPE, &tool);
     libevdev_enable_event_code(dev.get(), EV_ABS, ABS_MT_SLOT, &mtslot);
     libevdev_enable_event_code(dev.get(), EV_ABS, ABS_MT_TRACKING_ID, &trkid);
     libevdev_enable_event_code(dev.get(), EV_ABS, ABS_MT_POSITION_X, &absx);
