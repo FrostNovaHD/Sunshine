@@ -1649,11 +1649,14 @@ namespace platf {
 
     float x = touch.x * touch_port.width;
     float y = touch.y * touch_port.height;
+    float major = touch.contactAreaMajor * touch_port.width;
+    float minor = touch.contactAreaMinor * touch_port.width;
     int pressure = touch.pressureOrDistance * 1024;
     int orientation = standardize_rotation(touch.rotation);
     if (touch.rotation != LI_ROT_UNKNOWN) {
       libevdev_uinput_write_event(touchscreen, EV_ABS, ABS_MT_ORIENTATION, orientation);
     }
+
 
     auto scaled_x = (int) std::lround((x + touch_port.offset_x) * ((float) target_touch_port.width / (float) touch_port.width));
     auto scaled_y = (int) std::lround((y + touch_port.offset_y) * ((float) target_touch_port.height / (float) touch_port.height));
@@ -1665,6 +1668,8 @@ namespace platf {
     libevdev_uinput_write_event(touchscreen, EV_ABS, ABS_MT_TOOL_TYPE, MT_TOOL_FINGER);
     libevdev_uinput_write_event(touchscreen, EV_ABS, ABS_MT_POSITION_X, scaled_x);
     libevdev_uinput_write_event(touchscreen, EV_ABS, ABS_MT_POSITION_Y, scaled_y);
+    libevdev_uinput_write_event(touchscreen, EV_ABS, ABS_MT_TOUCH_MAJOR, major);
+    libevdev_uinput_write_event(touchscreen, EV_ABS, ABS_MT_TOUCH_MINOR, minor);
     libevdev_uinput_write_event(touchscreen, EV_ABS, ABS_MT_PRESSURE, pressure);
     libevdev_uinput_write_event(touchscreen, EV_SYN, SYN_REPORT, 0);
   }
