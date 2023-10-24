@@ -1682,7 +1682,79 @@ namespace platf {
    */
   void
   pen(client_input_t *input, const touch_port_t &touch_port, const pen_input_t &pen) {
-    // Unimplemented feature - platform_caps::pen_touch
+    int id;
+
+    auto raw = (client_input_raw_t *) input;
+
+    auto global = raw->global;
+
+    auto touchscreen = global->touch_input.get();
+
+
+    switch (pen.eventType)  {
+    case LI_TOUCH_EVENT_UP:
+          id = -1;
+        break;
+    case LI_TOUCH_EVENT_CANCEL:
+          id = -1;
+        break;
+    case LI_TOUCH_EVENT_CANCEL_ALL :
+        for (int i; i < 10; i++) {
+          libevdev_uinput_write_event(touchscreen, EV_ABS, ABS_MT_SLOT, i);
+          libevdev_uinput_write_event(touchscreen, EV_ABS, ABS_MT_TRACKING_ID, -1);
+        }
+        libevdev_uinput_write_event(touchscreen, EV_SYN, SYN_REPORT, 0);
+        return;
+    case LI_TOUCH_EVENT_DOWN:
+          id = 9;
+        break;
+    case LI_TOUCH_EVENT_MOVE:
+          id = 9;
+        break;
+    default:
+        return;
+    }
+
+
+    float x = pen.x * touch_port.width;
+    float y = pen.y * touch_port.height;
+    float major = pen.contactAreaMajor * touch_port.width;
+    float minor = pen.contactAreaMinor * touch_port.width;
+    int pressure = pen.pressureOrDistance * 1024;
+    int orientation = standardize_rotation(pen.rotation);
+    if (pen.rotation != LI_ROT_UNKNOWN) {
+      libevdev_uinput_write_event(touchscreen, EV_ABS, ABS_MT_ORIENTATION, orientation);
+    }
+
+
+    auto scaled_x = (int) std::lround((x + touch_port.offset_x) * ((float) target_touch_port.width / (float) touch_port.width));
+    auto scaled_y = (int) std::lround((y + touch_port.offset_y) * ((float) target_touch_port.height / (float) touch_port.height));
+
+
+    //This reports touch events as a type B uinput touchscreen/tablet
+    libevdev_uinput_write_event(touchscreen, EV_ABS, ABS_MT_SLOT, id);
+    libevdev_uinput_write_event(touchscreen, EV_ABS, ABS_MT_TRACKING_ID, 99);
+    libevdev_uinput_write_event(touchscreen, EV_ABS, ABS_MT_TOOL_TYPE, MT_TOOL_PEN);
+    libevdev_uinput_write_event(touchscreen, EV_ABS, ABS_MT_POSITION_X, scaled_x);
+    libevdev_uinput_write_event(touchscreen, EV_ABS, ABS_MT_POSITION_Y, scaled_y);
+    libevdev_uinput_write_event(touchscreen, EV_ABS, ABS_MT_TOUCH_MAJOR, major);
+    libevdev_uinput_write_event(touchscreen, EV_ABS, ABS_MT_TOUCH_MINOR, minor);
+    libevdev_uinput_write_event(touchscreen, EV_ABS, ABS_MT_PRESSURE, pressure);
+
+    switch (pen.toolType) {
+      default:
+      case LI_TOOL_TYPE_PEN:
+        libevdev_uinput_write_event(touchscreen, EV_KEY, BTN_STYLUS, id != -1 ? 0 : 1);
+        break;
+      case LI_TOOL_TYPE_ERASER:
+        libevdev_uinput_write_event(touchscreen, EV_KEY, BTN_STYLUS, id != -1 ? 0 : 1);
+        break;
+      case LI_TOOL_TYPE_UNKNOWN:
+        // Leave tool flags alone
+        break;
+    }
+
+    libevdev_uinput_write_event(touchscreen, EV_SYN, SYN_REPORT, 0);
   }
 
   /**
@@ -1817,6 +1889,8 @@ namespace platf {
     libevdev_enable_property(dev.get(), INPUT_PROP_DIRECT);
 
     libevdev_enable_event_type(dev.get(), EV_KEY);
+    libevdev_enable_event_code(dev.get(), EV_KEY, BTN_STYLUS, nullptr);
+    libevdev_enable_event_code(dev.get(), EV_KEY, BTN_STYLUS2, nullptr);
     libevdev_enable_event_code(dev.get(), EV_KEY, BTN_TOUCH, nullptr);
 
     input_absinfo mtslot {
