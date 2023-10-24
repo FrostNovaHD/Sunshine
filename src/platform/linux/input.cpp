@@ -1632,6 +1632,7 @@ namespace platf {
 
     float x = touch.x * touch_port.width;
     float y = touch.y * touch_port.height;
+    int pressure = touch.pressureOrDistance * 1024;
 
     auto scaled_x = (int) std::lround((x + touch_port.offset_x) * ((float) target_touch_port.width / (float) touch_port.width));
     auto scaled_y = (int) std::lround((y + touch_port.offset_y) * ((float) target_touch_port.height / (float) touch_port.height));
@@ -1643,6 +1644,7 @@ namespace platf {
     libevdev_uinput_write_event(touchscreen, EV_ABS, ABS_MT_TOOL_TYPE, MT_TOOL_FINGER);
     libevdev_uinput_write_event(touchscreen, EV_ABS, ABS_MT_POSITION_X, scaled_x);
     libevdev_uinput_write_event(touchscreen, EV_ABS, ABS_MT_POSITION_Y, scaled_y);
+    libevdev_uinput_write_event(touchscreen, EV_ABS, ABS_MT_PRESSURE, pressure);
     libevdev_uinput_write_event(touchscreen, EV_SYN, SYN_REPORT, 0);
   }
 
@@ -1818,6 +1820,15 @@ namespace platf {
       0
     };
 
+    input_absinfo pressure {
+      0,
+      0,
+      1024,
+      0,
+      0,
+      0
+    };
+
     input_absinfo absx {
       0,
       0,
@@ -1841,6 +1852,7 @@ namespace platf {
     libevdev_enable_event_code(dev.get(), EV_ABS, ABS_MT_TOOL_TYPE, &tool);
     libevdev_enable_event_code(dev.get(), EV_ABS, ABS_MT_SLOT, &mtslot);
     libevdev_enable_event_code(dev.get(), EV_ABS, ABS_MT_TRACKING_ID, &trkid);
+    libevdev_enable_event_code(dev.get(), EV_ABS, ABS_MT_PRESSURE, &pressure);
     libevdev_enable_event_code(dev.get(), EV_ABS, ABS_MT_POSITION_X, &absx);
     libevdev_enable_event_code(dev.get(), EV_ABS, ABS_MT_POSITION_Y, &absy);
 
