@@ -1587,6 +1587,23 @@ namespace platf {
   }
 
   /**
+   * @brief Converts moonlights rotation to a format uinput accepts
+   * @param raw_rotation moonlight raw touch rotation
+   */
+  int
+  standardize_rotation(std::uint16_t raw_rotation) {
+    int rotation;
+
+    if (raw_rotation < 180) {
+      return (int) std::lround(raw_rotation * 100);
+    }
+
+    rotation = (int) std::lround(raw_rotation - 360) * 100;
+
+    return rotation;
+  }
+
+  /**
    * @brief Sends a touch event to the OS.
    * @param input The client-specific input context.
    * @param touch_port The current viewport for translating to screen coordinates.
@@ -1633,6 +1650,10 @@ namespace platf {
     float x = touch.x * touch_port.width;
     float y = touch.y * touch_port.height;
     int pressure = touch.pressureOrDistance * 1024;
+    int orientation = standardize_rotation(touch.rotation);
+    if (touch.rotation != LI_ROT_UNKNOWN) {
+      libevdev_uinput_write_event(touchscreen, EV_ABS, ABS_MT_ORIENTATION, orientation);
+    }
 
     auto scaled_x = (int) std::lround((x + touch_port.offset_x) * ((float) target_touch_port.width / (float) touch_port.width));
     auto scaled_y = (int) std::lround((y + touch_port.offset_y) * ((float) target_touch_port.height / (float) touch_port.height));
@@ -1824,6 +1845,15 @@ namespace platf {
       0,
       0,
       1024,
+      0,
+      0,
+      0
+    };
+
+    input_absinfo orientation {
+      0,
+      0,
+      9000,
       0,
       0,
       0
