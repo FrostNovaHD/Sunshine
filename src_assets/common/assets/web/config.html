@@ -105,6 +105,29 @@
         </select>
         <div class="form-text">Choose which type of gamepad to emulate on the host</div>
       </div>
+      <div class="accordion" v-if="config.gamepad === 'ds4'">
+        <div class="accordion-item">
+          <h2 class="accordion-header">
+            <button class="accordion-button" type="button" data-bs-toggle="collapse"
+              data-bs-target="#panelsStayOpen-collapseOne">
+              Manual DS4 options
+            </button>
+          </h2>
+          <div id="panelsStayOpen-collapseOne" class="accordion-collapse collapse show"
+            aria-labelledby="panelsStayOpen-headingOne">
+            <div class="accordion-body">
+              <div>
+                <label for="ds4_back_as_touchpad_click" class="form-label">Map Back/Select to Touchpad Click</label>
+                <select id="ds4_back_as_touchpad_click" class="form-select" v-model="config.ds4_back_as_touchpad_click">
+                  <option value="disabled">Disabled</option>
+                  <option value="enabled">Enabled (default)</option>
+                </select>
+                <div class="form-text">When forcing DS4 emulation, map Back/Select to Touchpad Click</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
       <!--Ping Timeout-->
       <div class="mb-3">
         <label for="ping_timeout" class="form-label">Ping Timeout</label>
@@ -293,11 +316,13 @@
           placeholder="/dir/pkey.pem"
           v-model="config.pkey"
         />
-        <div class="form-text">The private key must be 2048 bits</div>
+        <div class="form-text">
+          The private key used for the web UI and Moonlight client pairing. For best compatibility, this should be an RSA-2048 private key.
+        </div>
       </div>
-      <!--Cert-->
+      <!--Certificate-->
       <div class="mb-3">
-        <label for="cert" class="form-label">Cert</label>
+        <label for="cert" class="form-label">Certificate</label>
         <input
           type="text"
           class="form-control"
@@ -306,7 +331,7 @@
           v-model="config.cert"
         />
         <div class="form-text">
-          The certificate must be signed with a 2048 bit key
+          The certificate used for the web UI and Moonlight client pairing. For best compatibility, this should have an RSA-2048 public key.
         </div>
       </div>
 
@@ -871,24 +896,6 @@
           Store Username/Password separately from Sunshine's state file.
         </div>
       </div>
-      <!--Origin PIN Allowed-->
-      <div class="mb-3">
-        <label for="origin_pin_allowed" class="form-label"
-          >Origin PIN Allowed</label
-        >
-        <select
-          id="origin_pin_allowed"
-          class="form-select"
-          v-model="config.origin_pin_allowed"
-        >
-          <option value="pc">Only localhost may access /pin</option>
-          <option value="lan">Only those in LAN may access /pin</option>
-          <option value="wan">Anyone may access /pin</option>
-        </select>
-        <div class="form-text">
-          The origin of the remote endpoint address that is not denied for HTTP method /pin
-        </div>
-      </div>
       <!--External IP-->
       <div class="mb-3">
         <label for="external_ip" class="form-label">External IP</label>
@@ -1154,6 +1161,7 @@
     "capture": "",
     "controller": "enabled",
     "install_steam_audio_drivers": "enabled",
+    "ds4_back_as_touchpad_click": "enabled",
     "dwmflush": "enabled",
     "encoder": "",
     "fps": "[10,30,60,90,120]",
@@ -1168,7 +1176,6 @@
     "nvenc_preset": "1",
     "nvenc_realtime_hags": "enabled",
     "nvenc_twopass": "quarter_res",
-    "origin_pin_allowed": "pc",
     "origin_web_ui_allowed": "lan",
     "qsv_coder": "auto",
     "qsv_preset": "medium",
