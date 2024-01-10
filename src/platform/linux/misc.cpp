@@ -249,6 +249,33 @@ namespace platf {
     lifetime::exit_sunshine(0, true);
   }
 
+  /**
+   * @brief Attempt to gracefully terminate a process group.
+   * @param native_handle The process group ID.
+   * @return true if termination was successfully requested.
+   */
+  bool
+  request_process_group_exit(std::uintptr_t native_handle) {
+    if (kill(-((pid_t) native_handle), SIGTERM) == 0 || errno == ESRCH) {
+      BOOST_LOG(debug) << "Successfully sent SIGTERM to process group: "sv << native_handle;
+      return true;
+    }
+    else {
+      BOOST_LOG(warning) << "Unable to send SIGTERM to process group ["sv << native_handle << "]: "sv << errno;
+      return false;
+    }
+  }
+
+  /**
+   * @brief Checks if a process group still has running children.
+   * @param native_handle The process group ID.
+   * @return true if processes are still running.
+   */
+  bool
+  process_group_running(std::uintptr_t native_handle) {
+    return waitpid(-((pid_t) native_handle), nullptr, WNOHANG) >= 0;
+  }
+
   struct sockaddr_in
   to_sockaddr(boost::asio::ip::address_v4 address, uint16_t port) {
     struct sockaddr_in saddr_v4 = {};
@@ -724,7 +751,6 @@ namespace platf {
   init() {
     // These are allowed to fail.
     gbm::init();
-    va::init();
 
     window_system = window_system_e::NONE;
 #ifdef SUNSHINE_BUILD_WAYLAND
@@ -759,11 +785,6 @@ namespace platf {
 #ifdef SUNSHINE_BUILD_DRM
     if (config::video.capture.empty() || config::video.capture == "kms") {
       if (verify_kms()) {
-        if (window_system == window_system_e::WAYLAND) {
-          // On Wayland, using KMS, the cursor is unreliable.
-          // Hide it by default
-          display_cursor = false;
-        }
         sources[source::KMS] = true;
       }
     }

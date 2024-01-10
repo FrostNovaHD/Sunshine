@@ -57,17 +57,51 @@ namespace proc {
     return std::make_unique<deinit_t>();
   }
 
+  /**
+   * @brief Terminates all child processes in a process group.
+   * @param proc The child process itself.
+   * @param group The group of all children in the process tree.
+   * @param exit_timeout The timeout to wait for the process group to gracefully exit.
+   */
   void
-  process_end(bp::child &proc, bp::group &proc_handle) {
-    if (!proc.running()) {
-      return;
+  terminate_process_group(bp::child &proc, bp::group &group, std::chrono::seconds exit_timeout) {
+    if (group.valid() && platf::process_group_running((std::uintptr_t) group.native_handle())) {
+      if (exit_timeout.count() > 0) {
+        // Request processes in the group to exit gracefully
+        if (platf::request_process_group_exit((std::uintptr_t) group.native_handle())) {
+          // If the request was successful, wait for a little while for them to exit.
+          BOOST_LOG(info) << "Successfully requested the app to exit. Waiting up to "sv << exit_timeout.count() << " seconds for it to close."sv;
+
+          // group::wait_for() and similar functions are broken and deprecated, so we use a simple polling loop
+          while (platf::process_group_running((std::uintptr_t) group.native_handle()) && (--exit_timeout).count() >= 0) {
+            std::this_thread::sleep_for(1s);
+          }
+
+          if (exit_timeout.count() < 0) {
+            BOOST_LOG(warning) << "App did not fully exit within the timeout. Terminating the app's remaining processes."sv;
+          }
+          else {
+            BOOST_LOG(info) << "All app processes have successfully exited."sv;
+          }
+        }
+        else {
+          BOOST_LOG(info) << "App did not respond to a graceful termination request. Forcefully terminating the app's processes."sv;
+        }
+      }
+      else {
+        BOOST_LOG(info) << "No graceful exit timeout was specified for this app. Forcefully terminating the app's processes."sv;
+      }
+
+      // We always call terminate() even if we waited successfully for all processes above.
+      // This ensures the process group state is consistent with the OS in boost.
+      group.terminate();
+      group.detach();
     }
 
-    BOOST_LOG(debug) << "Force termination Child-Process"sv;
-    proc_handle.terminate();
-
-    // avoid zombie process
-    proc.wait();
+    if (proc.valid()) {
+      // avoid zombie process
+      proc.detach();
+    }
   }
 
   boost::filesystem::path
@@ -220,7 +254,7 @@ namespace proc {
                                               find_working_directory(_app.cmd, _env) :
                                               boost::filesystem::path(_app.working_dir);
       BOOST_LOG(info) << "Executing: ["sv << _app.cmd << "] in ["sv << working_dir << ']';
-      _process = platf::run_command(_app.elevated, true, _app.cmd, working_dir, _env, _pipe.get(), ec, &_process_handle);
+      _process = platf::run_command(_app.elevated, true, _app.cmd, working_dir, _env, _pipe.get(), ec, &_process_group);
       if (ec) {
         BOOST_LOG(warning) << "Couldn't run ["sv << _app.cmd << "]: System: "sv << ec.message();
         return -1;
@@ -236,7 +270,15 @@ namespace proc {
 
   int
   proc_t::running() {
-    if (placebo || _process.running()) {
+    if (placebo) {
+      return _app_id;
+    }
+    else if (_app.wait_all && _process_group && platf::process_group_running((std::uintptr_t) _process_group.native_handle())) {
+      // The app is still running if any process in the group is still running
+      return _app_id;
+    }
+    else if (_process.running()) {
+      // The app is still running only if the initial process launched is still running
       return _app_id;
     }
     else if (_app.auto_detach && _process.native_exit_code() == 0 &&
@@ -258,13 +300,11 @@ namespace proc {
 
   void
   proc_t::terminate() {
-    bool has_run = _app_id > 0;
     std::error_code ec;
     placebo = false;
-    process_end(_process, _process_handle);
+    terminate_process_group(_process, _process_group, _app.exit_timeout);
     _process = bp::child();
-    _process_handle = bp::group();
-    _app_id = -1;
+    _process_group = bp::group();
 
     for (; _app_prep_it != _app_prep_begin; --_app_prep_it) {
       auto &cmd = *(_app_prep_it - 1);
@@ -293,12 +333,16 @@ namespace proc {
 
     _pipe.reset();
 #if defined SUNSHINE_TRAY && SUNSHINE_TRAY >= 1
+    bool has_run = _app_id > 0;
+
     // Only show the Stopped notification if we actually have an app to stop
     // Since terminate() is always run when a new app has started
     if (proc::proc.get_last_run_app_name().length() > 0 && has_run) {
       system_tray::update_tray_stopped(proc::proc.get_last_run_app_name());
     }
 #endif
+
+    _app_id = -1;
   }
 
   const std::vector<ctx_t> &
@@ -559,6 +603,8 @@ namespace proc {
         auto working_dir = app_node.get_optional<std::string>("working-dir"s);
         auto elevated = app_node.get_optional<bool>("elevated"s);
         auto auto_detach = app_node.get_optional<bool>("auto-detach"s);
+        auto wait_all = app_node.get_optional<bool>("wait-all"s);
+        auto exit_timeout = app_node.get_optional<int>("exit-timeout"s);
 
         std::vector<proc::cmd_t> prep_cmds;
         if (!exclude_global_prep.value_or(false)) {
@@ -618,6 +664,8 @@ namespace proc {
 
         ctx.elevated = elevated.value_or(false);
         ctx.auto_detach = auto_detach.value_or(true);
+        ctx.wait_all = wait_all.value_or(true);
+        ctx.exit_timeout = std::chrono::seconds { exit_timeout.value_or(5) };
 
         auto possible_ids = calculate_app_id(name, ctx.image_path, i++);
         if (ids.count(std::get<0>(possible_ids)) == 0) {

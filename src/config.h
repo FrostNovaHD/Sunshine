@@ -90,11 +90,10 @@ namespace config {
   struct nvhttp_t {
     // Could be any of the following values:
     // pc|lan|wan
-    std::string origin_pin_allowed;
     std::string origin_web_ui_allowed;
 
-    std::string pkey;  // must be 2048 bits
-    std::string cert;  // must be signed with a key of 2048 bits
+    std::string pkey;
+    std::string cert;
 
     std::string sunshine_name;
 
@@ -113,12 +112,18 @@ namespace config {
     std::chrono::duration<double> key_repeat_period;
 
     std::string gamepad;
+    bool ds4_back_as_touchpad_click;
+    bool motion_as_ds4;
+    bool touchpad_as_ds4;
 
     bool keyboard;
     bool mouse;
     bool controller;
 
     bool always_send_scancodes;
+
+    bool high_resolution_scrolling;
+    bool native_pen_touch;
   };
 
   namespace flag {

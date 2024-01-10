@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Stale
-        uses: actions/stale@v8
+        uses: actions/stale@v9
         with:
           close-issue-message: >
             This issue was closed because it has been stalled for 10 days with no activity.
@@ -31,19 +31,19 @@ jobs:
           exempt-pr-labels: 'dependencies,l10n'
           stale-issue-label: 'stale'
           stale-issue-message: >
-            :wave: @{issue-author}, It seems this issue hasn't had any activity in the past 90 days.
+            It seems this issue hasn't had any activity in the past 90 days.
             If it's still something you'd like addressed, please let us know by leaving a comment.
             Otherwise, to help keep our backlog tidy, we'll be closing this issue in 10 days. Thanks!
           stale-pr-label: 'stale'
           stale-pr-message: >
-            :wave: @{issue-author}, It looks like this PR has been idle for 90 days.
+            It looks like this PR has been idle for 90 days.
             If it's still something you're working on or would like to pursue,
             please leave a comment or update your branch.
             Otherwise, we'll be closing this PR in 10 days to reduce our backlog. Thanks!
           repo-token: ${{ secrets.GH_BOT_TOKEN }}
 
       - name: Invalid Template
-        uses: actions/stale@v8
+        uses: actions/stale@v9
         with:
           close-issue-message: >
             This issue was closed because the the template was not completed after 5 days.

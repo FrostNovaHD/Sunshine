@@ -307,6 +307,19 @@ namespace rtsp_stream {
       _map_cmd_cb.emplace(type, std::move(cb));
     }
 
+    /**
+     * @brief Launch a new streaming session.
+     * @note If the client does not begin streaming within the ping_timeout,
+     *       the session will be discarded.
+     * @param launch_session Streaming session information.
+     *
+     * EXAMPLES:
+     * ```cpp
+     * launch_session_t launch_session;
+     * rtsp_server_t server {};
+     * server.session_raise(launch_session);
+     * ```
+     */
     void
     session_raise(rtsp_stream::launch_session_t launch_session) {
       auto now = std::chrono::steady_clock::now();
@@ -315,7 +328,7 @@ namespace rtsp_stream {
       if (raised_timeout > now && launch_event.peek()) {
         return;
       }
-      raised_timeout = now + 10s;
+      raised_timeout = now + config::stream.ping_timeout;
 
       --_slot_count;
       launch_event.raise(launch_session);
@@ -328,12 +341,22 @@ namespace rtsp_stream {
 
     safe::event_t<rtsp_stream::launch_session_t> launch_event;
 
+    /**
+     * @brief Clear launch sessions.
+     * @param all If true, clear all sessions. Otherwise, only clear timed out and stopped sessions.
+     *
+     * EXAMPLES:
+     * ```cpp
+     * clear(false);
+     * ```
+     */
     void
     clear(bool all = true) {
       // if a launch event timed out --> Remove it.
       if (raised_timeout < std::chrono::steady_clock::now()) {
         auto discarded = launch_event.pop(0s);
         if (discarded) {
+          BOOST_LOG(debug) << "Event timeout: "sv << discarded->unique_id;
           ++_slot_count;
         }
       }
@@ -540,16 +563,25 @@ namespace rtsp_stream {
 
   void
   cmd_setup(rtsp_server_t *server, tcp::socket &sock, msg_t &&req) {
-    OPTION_ITEM options[3] {};
+    OPTION_ITEM options[4] {};
 
     auto &seqn = options[0];
     auto &session_option = options[1];
     auto &port_option = options[2];
+    auto &payload_option = options[3];
 
     seqn.option = const_cast<char *>("CSeq");
 
     auto seqn_str = std::to_string(req->sequenceNumber);
     seqn.content = const_cast<char *>(seqn_str.c_str());
+
+    if (!server->launch_event.peek()) {
+      // /launch has not been used
+
+      respond(sock, &seqn, 503, "Service Unavailable", req->sequenceNumber, {});
+      return;
+    }
+    auto launch_session { server->launch_event.view() };
 
     std::string_view target { req->message.request.target };
     auto begin = std::find(std::begin(target), std::end(target), '=') + 1;
@@ -584,6 +616,19 @@ namespace rtsp_stream {
 
     port_option.option = const_cast<char *>("Transport");
     port_option.content = port_value.data();
+
+    // Send identifiers that will be echoed in the other connections
+    auto connect_data = std::to_string(launch_session->control_connect_data);
+    if (type == "control"sv) {
+      payload_option.option = const_cast<char *>("X-SS-Connect-Data");
+      payload_option.content = connect_data.data();
+    }
+    else {
+      payload_option.option = const_cast<char *>("X-SS-Ping-Payload");
+      payload_option.content = launch_session->av_ping_payload.data();
+    }
+
+    port_option.next = &payload_option;
 
     respond(sock, &seqn, 200, "OK", req->sequenceNumber, {});
   }
@@ -656,11 +701,14 @@ namespace rtsp_stream {
     args.try_emplace("x-nv-general.useReliableUdp"sv, "1"sv);
     args.try_emplace("x-nv-vqos[0].fec.minRequiredFecPackets"sv, "0"sv);
     args.try_emplace("x-nv-general.featureFlags"sv, "135"sv);
+    args.try_emplace("x-ml-general.featureFlags"sv, "0"sv);
     args.try_emplace("x-nv-vqos[0].qosTrafficType"sv, "5"sv);
     args.try_emplace("x-nv-aqos.qosTrafficType"sv, "4"sv);
+    args.try_emplace("x-ml-video.configuredBitrateKbps"sv, "0"sv);
 
     stream::config_t config;
 
+    std::int64_t configuredBitrateKbps;
     config.audio.flags[audio::config_t::HOST_AUDIO] = launch_session->host_audio;
     try {
       config.audio.channels = util::from_view(args.at("x-nv-audio.surround.numChannels"sv));
@@ -673,7 +721,8 @@ namespace rtsp_stream {
       config.controlProtocolType = util::from_view(args.at("x-nv-general.useReliableUdp"sv));
       config.packetsize = util::from_view(args.at("x-nv-video[0].packetSize"sv));
       config.minRequiredFecPackets = util::from_view(args.at("x-nv-vqos[0].fec.minRequiredFecPackets"sv));
-      config.featureFlags = util::from_view(args.at("x-nv-general.featureFlags"sv));
+      config.nvFeatureFlags = util::from_view(args.at("x-nv-general.featureFlags"sv));
+      config.mlFeatureFlags = util::from_view(args.at("x-ml-general.featureFlags"sv));
       config.audioQosType = util::from_view(args.at("x-nv-aqos.qosTrafficType"sv));
       config.videoQosType = util::from_view(args.at("x-nv-vqos[0].qosTrafficType"sv));
 
@@ -686,6 +735,8 @@ namespace rtsp_stream {
       config.monitor.encoderCscMode = util::from_view(args.at("x-nv-video[0].encoderCscMode"sv));
       config.monitor.videoFormat = util::from_view(args.at("x-nv-vqos[0].bitStreamFormat"sv));
       config.monitor.dynamicRange = util::from_view(args.at("x-nv-video[0].dynamicRangeMode"sv));
+
+      configuredBitrateKbps = util::from_view(args.at("x-ml-video.configuredBitrateKbps"sv));
     }
     catch (std::out_of_range &) {
       respond(sock, &option, 400, "BAD REQUEST", req->sequenceNumber, {});
@@ -705,6 +756,32 @@ namespace rtsp_stream {
       }
     }
 
+    // If the client sent a configured bitrate, we will choose the actual bitrate ourselves
+    // by using FEC percentage and audio quality settings. If the calculated bitrate ends up
+    // too low, we'll allow it to exceed the limits rather than reducing the encoding bitrate
+    // down to nearly nothing.
+    if (configuredBitrateKbps) {
+      BOOST_LOG(debug) << "Client configured bitrate is "sv << configuredBitrateKbps << " Kbps"sv;
+
+      // If the FEC percentage isn't too high, adjust the configured bitrate to ensure video
+      // traffic doesn't exceed the user's selected bitrate when the FEC shards are included.
+      if (config::stream.fec_percentage <= 80) {
+        configuredBitrateKbps /= 100.f / (100 - config::stream.fec_percentage);
+      }
+
+      // Adjust the bitrate to account for audio traffic bandwidth usage (capped at 20% reduction).
+      // The bitrate per channel is 256 Kbps for high quality mode and 96 Kbps for normal quality.
+      auto audioBitrateAdjustment = (config.audio.flags[audio::config_t::HIGH_QUALITY] ? 256 : 96) * config.audio.channels;
+      configuredBitrateKbps -= std::min((std::int64_t) audioBitrateAdjustment, configuredBitrateKbps / 5);
+
+      // Reduce it by another 500Kbps to account for A/V packet overhead and control data
+      // traffic (capped at 10% reduction).
+      configuredBitrateKbps -= std::min((std::int64_t) 500, configuredBitrateKbps / 10);
+
+      BOOST_LOG(debug) << "Final adjusted video encoding bitrate is "sv << configuredBitrateKbps << " Kbps"sv;
+      config.monitor.bitrate = configuredBitrateKbps;
+    }
+
     if (config.monitor.videoFormat == 1 && video::active_hevc_mode == 1) {
       BOOST_LOG(warning) << "HEVC is disabled, yet the client requested HEVC"sv;
 
@@ -719,7 +796,7 @@ namespace rtsp_stream {
       return;
     }
 
-    auto session = stream::session::alloc(config, launch_session->gcm_key, launch_session->iv);
+    auto session = stream::session::alloc(config, launch_session->gcm_key, launch_session->iv, launch_session->av_ping_payload, launch_session->control_connect_data);
 
     auto slot = server->accept(session);
     if (!slot) {

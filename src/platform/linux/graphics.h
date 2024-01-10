@@ -268,15 +268,19 @@ namespace egl {
     display_t::pointer egl_display,
     const surface_descriptor_t &xrgb);
 
+  rgb_t
+  create_blank(platf::img_t &img);
+
   std::optional<nv12_t>
   import_target(
     display_t::pointer egl_display,
     std::array<file_t, nv12_img_t::num_fds> &&fds,
-    const surface_descriptor_t &r8, const surface_descriptor_t &gr88);
+    const surface_descriptor_t &y, const surface_descriptor_t &uv);
 
   class cursor_t: public platf::img_t {
   public:
     int x, y;
+    int src_w, src_h;
 
     unsigned long serial;
 

@@ -696,7 +696,6 @@ namespace video {
       // Common options
       {
         { "preset"s, &config::video.qsv.qsv_preset },
-        { "scenario"s, "remotegaming"s },
         { "forced_idr"s, 1 },
         { "async_depth"s, 1 },
         { "low_delay_brc"s, 1 },
@@ -713,7 +712,6 @@ namespace video {
       // Common options
       {
         { "preset"s, &config::video.qsv.qsv_preset },
-        { "scenario"s, "remotegaming"s },
         { "forced_idr"s, 1 },
         { "async_depth"s, 1 },
         { "low_delay_brc"s, 1 },
@@ -737,7 +735,6 @@ namespace video {
       {
         { "preset"s, &config::video.qsv.qsv_preset },
         { "cavlc"s, &config::video.qsv.qsv_cavlc },
-        { "scenario"s, "remotegaming"s },
         { "forced_idr"s, 1 },
         { "async_depth"s, 1 },
         { "low_delay_brc"s, 1 },
@@ -887,7 +884,7 @@ namespace video {
     std::make_unique<encoder_platform_formats_avcodec>(
       AV_HWDEVICE_TYPE_VAAPI, AV_HWDEVICE_TYPE_NONE,
       AV_PIX_FMT_VAAPI,
-      AV_PIX_FMT_NV12, AV_PIX_FMT_YUV420P10,
+      AV_PIX_FMT_NV12, AV_PIX_FMT_P010,
       vaapi_init_avcodec_hardware_input_buffer),
     {
       // Common options

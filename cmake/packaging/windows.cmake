@@ -36,9 +36,6 @@ install(DIRECTORY "${SUNSHINE_SOURCE_ASSETS_DIR}/windows/misc/gamepad/"
         COMPONENT gamepad)
 
 # Sunshine assets
-install(DIRECTORY "${SUNSHINE_SOURCE_ASSETS_DIR}/common/assets/"
-        DESTINATION "${SUNSHINE_ASSETS_DIR}"
-        COMPONENT assets)
 install(DIRECTORY "${SUNSHINE_SOURCE_ASSETS_DIR}/windows/assets/"
         DESTINATION "${SUNSHINE_ASSETS_DIR}"
         COMPONENT assets)
@@ -103,7 +100,7 @@ set(CPACK_NSIS_DELETE_ICONS_EXTRA
 # Checking for previous installed versions
 set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL "ON")
 
-set(CPACK_NSIS_HELP_LINK "https://sunshinestream.readthedocs.io/about/installation.html")
+set(CPACK_NSIS_HELP_LINK "https://sunshinestream.readthedocs.io/en/latest/about/installation.html")
 set(CPACK_NSIS_URL_INFO_ABOUT "${CMAKE_PROJECT_HOMEPAGE_URL}")
 set(CPACK_NSIS_CONTACT "${CMAKE_PROJECT_HOMEPAGE_URL}/support")
 

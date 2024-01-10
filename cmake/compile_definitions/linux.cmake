@@ -91,6 +91,7 @@ endif()
 if(CUDA_FOUND)
     include_directories(SYSTEM third-party/nvfbc)
     list(APPEND PLATFORM_TARGET_FILES
+            src/platform/linux/cuda.h
             src/platform/linux/cuda.cu
             src/platform/linux/cuda.cpp
             third-party/nvfbc/NvFBC.h)
@@ -110,12 +111,28 @@ if(LIBDRM_FOUND AND LIBCAP_FOUND)
     add_compile_definitions(SUNSHINE_BUILD_DRM)
     include_directories(SYSTEM ${LIBDRM_INCLUDE_DIRS} ${LIBCAP_INCLUDE_DIRS})
     list(APPEND PLATFORM_LIBRARIES ${LIBDRM_LIBRARIES} ${LIBCAP_LIBRARIES})
-    list(APPEND PLATFORM_TARGET_FILES src/platform/linux/kmsgrab.cpp)
+    list(APPEND PLATFORM_TARGET_FILES
+            src/platform/linux/kmsgrab.cpp)
     list(APPEND SUNSHINE_DEFINITIONS EGL_NO_X11=1)
 elseif(NOT LIBDRM_FOUND)
     message(WARNING "Missing libdrm")
 elseif(NOT LIBDRM_FOUND)
     message(WARNING "Missing libcap")
+endif()
+
+# vaapi
+if(${SUNSHINE_ENABLE_VAAPI})
+    find_package(Libva)
+else()
+    set(LIBVA_FOUND OFF)
+endif()
+if(LIBVA_FOUND)
+    add_compile_definitions(SUNSHINE_BUILD_VAAPI)
+    include_directories(SYSTEM ${LIBVA_INCLUDE_DIR})
+    list(APPEND PLATFORM_LIBRARIES ${LIBVA_LIBRARIES} ${LIBVA_DRM_LIBRARIES})
+    list(APPEND PLATFORM_TARGET_FILES
+            src/platform/linux/vaapi.h
+            src/platform/linux/vaapi.cpp)
 endif()
 
 # wayland
@@ -127,8 +144,15 @@ endif()
 if(WAYLAND_FOUND)
     add_compile_definitions(SUNSHINE_BUILD_WAYLAND)
 
-    GEN_WAYLAND(xdg-output-unstable-v1)
-    GEN_WAYLAND(wlr-export-dmabuf-unstable-v1)
+    if(NOT SUNSHINE_SYSTEM_WAYLAND_PROTOCOLS)
+        set(WAYLAND_PROTOCOLS_DIR "${CMAKE_SOURCE_DIR}/third-party/wayland-protocols")
+    else()
+        pkg_get_variable(WAYLAND_PROTOCOLS_DIR wayland-protocols pkgdatadir)
+        pkg_check_modules(WAYLAND_PROTOCOLS wayland-protocols REQUIRED)
+    endif()
+
+    GEN_WAYLAND("${WAYLAND_PROTOCOLS_DIR}" "unstable/xdg-output" xdg-output-unstable-v1)
+    GEN_WAYLAND("${CMAKE_SOURCE_DIR}/third-party/wlr-protocols" "unstable" wlr-export-dmabuf-unstable-v1)
 
     include_directories(
             SYSTEM
@@ -139,6 +163,7 @@ if(WAYLAND_FOUND)
     list(APPEND PLATFORM_LIBRARIES ${WAYLAND_LIBRARIES})
     list(APPEND PLATFORM_TARGET_FILES
             src/platform/linux/wlgrab.cpp
+            src/platform/linux/wayland.h
             src/platform/linux/wayland.cpp)
 endif()
 
@@ -152,11 +177,17 @@ if(X11_FOUND)
     add_compile_definitions(SUNSHINE_BUILD_X11)
     include_directories(SYSTEM ${X11_INCLUDE_DIR})
     list(APPEND PLATFORM_LIBRARIES ${X11_LIBRARIES})
-    list(APPEND PLATFORM_TARGET_FILES src/platform/linux/x11grab.cpp)
+    list(APPEND PLATFORM_TARGET_FILES
+            src/platform/linux/x11grab.h
+            src/platform/linux/x11grab.cpp)
 endif()
 
-if(NOT ${CUDA_FOUND} AND NOT ${WAYLAND_FOUND} AND NOT ${X11_FOUND} AND NOT (${LIBDRM_FOUND} AND ${LIBCAP_FOUND}))
-    message(FATAL_ERROR "Couldn't find either x11, wayland, cuda or (libdrm and libcap)")
+if(NOT ${CUDA_FOUND}
+        AND NOT ${WAYLAND_FOUND}
+        AND NOT ${X11_FOUND}
+        AND NOT (${LIBDRM_FOUND} AND ${LIBCAP_FOUND})
+        AND NOT ${LIBVA_FOUND})
+    message(FATAL_ERROR "Couldn't find either cuda, wayland, x11, (libdrm and libcap), or libva")
 endif()
 
 # tray icon
@@ -194,17 +225,12 @@ endif()
 
 list(APPEND PLATFORM_TARGET_FILES
         src/platform/linux/publish.cpp
-        src/platform/linux/vaapi.h
-        src/platform/linux/vaapi.cpp
-        src/platform/linux/cuda.h
         src/platform/linux/graphics.h
         src/platform/linux/graphics.cpp
         src/platform/linux/misc.h
         src/platform/linux/misc.cpp
         src/platform/linux/audio.cpp
         src/platform/linux/input.cpp
-        src/platform/linux/x11grab.h
-        src/platform/linux/wayland.h
         third-party/glad/src/egl.c
         third-party/glad/src/gl.c
         third-party/glad/include/EGL/eglplatform.h
