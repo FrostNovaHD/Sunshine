@@ -30,21 +30,29 @@ namespace display_device {
     device_topology_map_t
     make_valid_topology_map(const std::vector<DISPLAYCONFIG_PATH_INFO> &paths) {
       device_topology_map_t current_topology;
+      std::unordered_set<std::string> used_paths;
       for (std::size_t index = 0; index < paths.size(); ++index) {
         const auto &path { paths[index] };
 
-        const auto current_id { w_utils::get_device_id_for_valid_path(path, w_utils::ALL_DEVICES) };
-        if (current_id.empty()) {
+        const auto device_info { w_utils::get_device_info_for_valid_path(path, w_utils::ALL_DEVICES) };
+        if (!device_info) {
           // Path is not valid
           continue;
         }
 
-        if (current_topology.count(current_id) > 0) {
+        if (used_paths.count(device_info->device_path) > 0) {
           // Path was already selected
           continue;
         }
 
-        current_topology[current_id] = index;
+        if (current_topology.count(device_info->device_id) > 0) {
+          BOOST_LOG(error) << "duplicate display device id found: " << device_info->device_id;
+          return {};
+        }
+
+        used_paths.insert(device_info->device_path);
+        current_topology[device_info->device_id] = index;
+        BOOST_LOG(verbose) << "new valid topology entry [" << index << "] for device " << device_info->device_id << " (device path: " << device_info->device_path << ")";
       }
 
       return current_topology;
@@ -173,6 +181,11 @@ namespace display_device {
       }
 
       const auto current_topology { make_valid_topology_map(display_data->paths) };
+      if (current_topology.empty()) {
+        // Error already logged
+        return false;
+      }
+
       const auto clear_path_data = [&]() {
         // These fields need to be cleared (according to MSDOCS) for devices we want to deactivate or modify.
         // When modifying, we will restore some of them.
@@ -270,6 +283,11 @@ namespace display_device {
 
     device_info_map_t available_devices;
     const auto current_topology { make_valid_topology_map(display_data->paths) };
+    if (current_topology.empty()) {
+      // Error already logged
+      return {};
+    }
+
     for (const auto &topology : current_topology) {
       const auto &device_id { topology.first };
       const auto path_index { topology.second };
@@ -312,14 +330,14 @@ namespace display_device {
     std::unordered_map<std::string, std::size_t> position_to_topology_index;
     active_topology_t topology;
     for (const auto &path : display_data->paths) {
-      const auto current_id { w_utils::get_device_id_for_valid_path(path, w_utils::ACTIVE_ONLY_DEVICES) };
-      if (current_id.empty()) {
+      const auto device_info { w_utils::get_device_info_for_valid_path(path, w_utils::ACTIVE_ONLY_DEVICES) };
+      if (!device_info) {
         continue;
       }
 
       const auto source_mode { w_utils::get_source_mode(w_utils::get_source_index(path, display_data->modes), display_data->modes) };
       if (!source_mode) {
-        BOOST_LOG(error) << "active device does not have a source mode: " << current_id << "!";
+        BOOST_LOG(error) << "active device does not have a source mode: " << device_info->device_id << "!";
         return {};
       }
 
@@ -328,10 +346,10 @@ namespace display_device {
 
       if (index_it == std::end(position_to_topology_index)) {
         position_to_topology_index[lazy_lookup] = topology.size();
-        topology.push_back({ current_id });
+        topology.push_back({ device_info->device_id });
       }
       else {
-        topology.at(index_it->second).push_back(current_id);
+        topology.at(index_it->second).push_back(device_info->device_id);
       }
     }
 

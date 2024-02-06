@@ -96,6 +96,15 @@ namespace display_device {
 
     std::string
     get_device_id(const DISPLAYCONFIG_PATH_INFO &path) {
+      // This is not the prettiest id there is, but it seems to be unique.
+      // The MONITOR ID that MultiMonitorTool uses is not always unique in some combinations, so we'll just go with the device path.
+      auto device_id { get_monitor_device_path(path) };
+      std::replace(std::begin(device_id), std::end(device_id), '#', '-');  // Hashtags are not supported by Sunshine config
+      return device_id;
+    }
+
+    std::string
+    get_monitor_device_path(const DISPLAYCONFIG_PATH_INFO &path) {
       DISPLAYCONFIG_TARGET_DEVICE_NAME target_name = {};
       target_name.header.adapterId = path.targetInfo.adapterId;
       target_name.header.id = path.targetInfo.id;
@@ -108,11 +117,7 @@ namespace display_device {
         return {};
       }
 
-      // This is not the prettiest id there is, but it seems to be unique.
-      // The MONITOR ID that MultiMonitorTool uses is not always unique in some combinations, so we'll just go with the device path.
-      auto device_id { convert_to_string(target_name.monitorDevicePath) };
-      std::replace(std::begin(device_id), std::end(device_id), '#', '-');  // Hashtags are not supported by Sunshine config
-      return device_id;
+      return convert_to_string(target_name.monitorDevicePath);
     }
 
     std::string
@@ -341,34 +346,39 @@ namespace display_device {
       return const_cast<DISPLAYCONFIG_TARGET_MODE *>(get_target_mode(index, const_cast<const std::vector<DISPLAYCONFIG_MODE_INFO> &>(modes)));
     }
 
-    std::string
-    get_device_id_for_valid_path(const DISPLAYCONFIG_PATH_INFO &path, bool must_be_active) {
+    boost::optional<device_info_t>
+    get_device_info_for_valid_path(const DISPLAYCONFIG_PATH_INFO &path, bool must_be_active) {
       // As far as we are concerned, for us the path is valid as long as it is available,
-      // has a device id that we can use and has a display name. Optionally, we might
+      // has a device path and a device id that we can use and has a display name. Optionally, we might
       // want it to be active.
 
       if (!is_available(path)) {
         // Could be transient issue according to MSDOCS (no longer available, but still "active")
-        return {};
+        return boost::none;
       }
 
       if (must_be_active) {
         if (!is_active(path)) {
-          return {};
+          return boost::none;
         }
       }
 
-      const auto current_id { get_device_id(path) };
-      if (current_id.empty()) {
-        return {};
+      const auto device_path { get_monitor_device_path(path) };
+      if (device_path.empty()) {
+        return boost::none;
+      }
+
+      const auto device_id { get_device_id(path) };
+      if (device_id.empty()) {
+        return boost::none;
       }
 
       const auto display_name { get_display_name(path) };
       if (display_name.empty()) {
-        return {};
+        return boost::none;
       }
 
-      return current_id;
+      return device_info_t { device_path, device_id };
     }
 
     boost::optional<path_and_mode_data_t>
@@ -415,12 +425,12 @@ namespace display_device {
     const DISPLAYCONFIG_PATH_INFO *
     get_active_path(const std::string &device_id, const std::vector<DISPLAYCONFIG_PATH_INFO> &paths) {
       for (const auto &path : paths) {
-        const auto current_id { get_device_id_for_valid_path(path, ACTIVE_ONLY_DEVICES) };
-        if (current_id.empty()) {
+        const auto device_info { get_device_info_for_valid_path(path, ACTIVE_ONLY_DEVICES) };
+        if (!device_info) {
           continue;
         }
 
-        if (current_id == device_id) {
+        if (device_info->device_id == device_id) {
           return &path;
         }
       }

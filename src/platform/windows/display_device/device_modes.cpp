@@ -60,19 +60,19 @@ namespace display_device {
         // We will now iterate over all of the active paths (provided path included) and check if
         // any of them are duplicated.
         for (const auto &path : display_data->paths) {
-          const auto current_id { w_utils::get_device_id_for_valid_path(path, w_utils::ACTIVE_ONLY_DEVICES) };
-          if (current_id.empty()) {
+          const auto device_info { w_utils::get_device_info_for_valid_path(path, w_utils::ACTIVE_ONLY_DEVICES) };
+          if (!device_info) {
             continue;
           }
 
-          if (all_device_ids.count(current_id) > 0) {
+          if (all_device_ids.count(device_info->device_id) > 0) {
             // Already checked
             continue;
           }
 
           const auto source_mode { w_utils::get_source_mode(w_utils::get_source_index(path, display_data->modes), display_data->modes) };
           if (!source_mode) {
-            BOOST_LOG(error) << "active device does not have a source mode: " << current_id << "!";
+            BOOST_LOG(error) << "active device does not have a source mode: " << device_info->device_id << "!";
             return {};
           }
 
@@ -80,7 +80,7 @@ namespace display_device {
             continue;
           }
 
-          all_device_ids.insert(current_id);
+          all_device_ids.insert(device_info->device_id);
         }
       }
 

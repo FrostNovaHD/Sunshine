@@ -20,6 +20,11 @@ namespace display_device {
       std::vector<DISPLAYCONFIG_MODE_INFO> modes;
     };
 
+    struct device_info_t {
+      std::string device_path;
+      std::string device_id;
+    };
+
     std::string
     get_ccd_error_string(const LONG error_code);
 
@@ -46,6 +51,9 @@ namespace display_device {
 
     std::string
     get_device_id(const DISPLAYCONFIG_PATH_INFO &path);
+
+    std::string
+    get_monitor_device_path(const DISPLAYCONFIG_PATH_INFO &path);
 
     std::string
     get_friendly_name(const DISPLAYCONFIG_PATH_INFO &path);
@@ -89,8 +97,8 @@ namespace display_device {
     DISPLAYCONFIG_TARGET_MODE *
     get_target_mode(const boost::optional<UINT32> &index, std::vector<DISPLAYCONFIG_MODE_INFO> &modes);
 
-    std::string
-    get_device_id_for_valid_path(const DISPLAYCONFIG_PATH_INFO &path, bool must_be_active);
+    boost::optional<device_info_t>
+    get_device_info_for_valid_path(const DISPLAYCONFIG_PATH_INFO &path, bool must_be_active);
 
     boost::optional<path_and_mode_data_t>
     query_display_config(bool active_only);
