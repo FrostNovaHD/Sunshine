@@ -9,28 +9,41 @@ namespace display_device {
 
   namespace {
 
-    using device_topology_map_t = std::unordered_map<std::string, std::size_t>;
+    bool
+    compareAdapterIds(const LUID &a, const LUID &b) {
+      return a.HighPart == b.HighPart && a.LowPart == b.LowPart;
+    }
+
+    std::string
+    to_string(const LUID &id) {
+      return std::to_string(id.HighPart) + std::to_string(id.LowPart);
+    }
+
+    struct device_topology_data_t {
+      std::unordered_map<UINT32, std::size_t> source_id_to_path_index;
+      LUID source_adapter_id;
+      boost::optional<UINT32> active_source;
+
+      std::size_t
+      get_best_path_index() const {
+        if (active_source) {
+          return source_id_to_path_index.at(*active_source);
+        }
+
+        // All paths are inactive so any will do
+        return source_id_to_path_index.at(0);
+      }
+    };
+
+    using device_topology_data_map_t = std::unordered_map<std::string, device_topology_data_t>;
 
     /*!
-     * Parses the path into a map of ["valid" device id -> path index].
-     *
-     * The paths are already ordered as the "best in front". This includes both
-     * inactive and active devices. What's important is to select only device
-     * per a device path (which we use for our device id in this case).
-     *
-     * There can be multiple valid paths per an adapter, but we only care
-     * about the "best one" - the first in the list.
-     *
-     * From experimentation it seems that it does not really matter for Windows
-     * if you select not the "best" valid path as it will just ignore your selection
-     * and still select the "best" path anyway. This can be verified by looking at the
-     * source ids from the structure and how they do not match the ones from the paths
-     * you give to Windows (unless they are not persistent or generated on the fly).
+     * Parses the paths into a map of [valid device id -> data that can actually be used].
      */
-    device_topology_map_t
-    make_valid_topology_map(const std::vector<DISPLAYCONFIG_PATH_INFO> &paths) {
-      device_topology_map_t current_topology;
-      std::unordered_set<std::string> used_paths;
+    device_topology_data_map_t
+    make_device_topology_data(const std::vector<DISPLAYCONFIG_PATH_INFO> &paths) {
+      device_topology_data_map_t topology_data;
+      std::unordered_map<std::string, std::string> paths_to_ids;
       for (std::size_t index = 0; index < paths.size(); ++index) {
         const auto &path { paths[index] };
 
@@ -40,137 +53,164 @@ namespace display_device {
           continue;
         }
 
-        if (used_paths.count(device_info->device_path) > 0) {
-          // Path was already selected
-          continue;
+        const auto prev_device_id_for_path_it { paths_to_ids.find(device_info->device_path) };
+        if (prev_device_id_for_path_it != std::end(paths_to_ids)) {
+          if (prev_device_id_for_path_it->second != device_info->device_id) {
+            BOOST_LOG(error) << "duplicate display device id found: " << device_info->device_id << " (device path: " << device_info->device_path << ")";
+            return {};
+          }
+        }
+        else {
+          BOOST_LOG(verbose) << "new valid device id entry for device " << device_info->device_id << " (device path: " << device_info->device_path << ")";
+          paths_to_ids[device_info->device_path] = device_info->device_id;
         }
 
-        if (current_topology.count(device_info->device_id) > 0) {
-          BOOST_LOG(error) << "duplicate display device id found: " << device_info->device_id;
-          return {};
-        }
+        auto topology_data_it { topology_data.find(device_info->device_id) };
+        if (topology_data_it != std::end(topology_data)) {
+          if (!compareAdapterIds(topology_data_it->second.source_adapter_id, path.sourceInfo.adapterId)) {
+            // Sanity check, should not be possible since adapter in embedded in the path
+            BOOST_LOG(error) << "device path " << device_info->device_path << " has different adapters!";
+            return {};
+          }
 
-        used_paths.insert(device_info->device_path);
-        current_topology[device_info->device_id] = index;
-        BOOST_LOG(verbose) << "new valid topology entry [" << index << "] for device " << device_info->device_id << " (device path: " << device_info->device_path << ")";
+          topology_data_it->second.source_id_to_path_index[path.sourceInfo.id] = index;
+        }
+        else {
+          topology_data[device_info->device_id] = device_topology_data_t {
+            { { path.sourceInfo.id, index } },
+            path.sourceInfo.adapterId,
+            // Since active paths are always in the front, this is the only time we check (when we add new entry)
+            w_utils::is_active(path) ? boost::make_optional(path.sourceInfo.id) : boost::none
+          };
+        }
       }
 
-      return current_topology;
+      return topology_data;
     }
 
-    struct preexisting_topology_t {
-      UINT32 group_id;
-      std::size_t path_index;
-    };
-    using preexisting_topology_map_t = std::unordered_map<std::string, preexisting_topology_t>;
-
     /*!
-     * Here we try to generate a topology that we expect Windows to already know about and have settings.
-     * Devices that we want to have duplicated shall have the same group id and devices that we want
-     * to have extended shall have different group ids.
+     * Selects the best possible paths for the requested topology based on the data that is available to us.
      *
-     * Group id is just and arbitrary number that does have to be continuous.
+     * If the paths will be used for a completely new topology (Windows never had it set), we need to take into
+     * account the source id availability per the adapter - duplicated displays must share the same source id
+     * (if they belong to the same adapter) and have different ids if they are not duplicated displays.
+     *
+     * There are limited amount of available ids (see comments in the code) so we will abort early if we are
+     * out of ids.
+     *
+     * The paths for a topology that already exists (Windows has set it at least one) does not have to follow
+     * the mentioned "source id" rule. Windows will simply ignore them (since we ask it to) and select
+     * paths that were previously configured (that might differ in source ids) based on the paths that we provide.
      */
-    preexisting_topology_map_t
-    make_preexisting_topology(const active_topology_t &new_topology, const device_topology_map_t &current_topology) {
+    std::vector<DISPLAYCONFIG_PATH_INFO>
+    make_new_paths_for_topology(const active_topology_t &new_topology, const device_topology_data_map_t &topology_data, const std::vector<DISPLAYCONFIG_PATH_INFO> &paths) {
+      std::vector<DISPLAYCONFIG_PATH_INFO> new_paths;
+
       UINT32 group_id { 0 };
-      preexisting_topology_map_t preexisting_topology;
+      std::unordered_map<std::string, std::unordered_set<UINT32>> used_source_adapter_ids_per_adapter;
+      const auto is_source_id_already_used = [&used_source_adapter_ids_per_adapter](const LUID &adapter_id, UINT32 source_id) {
+        auto entry_it { used_source_adapter_ids_per_adapter.find(to_string(adapter_id)) };
+        if (entry_it != std::end(used_source_adapter_ids_per_adapter)) {
+          return entry_it->second.count(source_id) > 0;
+        }
+
+        return false;
+      };
 
       for (const auto &group : new_topology) {
+        std::unordered_map<std::string, UINT32> used_source_adapter_ids_per_adapter_for_group;
+        const auto get_already_used_source_id_in_group = [&used_source_adapter_ids_per_adapter_for_group](const LUID &adapter_id) -> boost::optional<UINT32> {
+          auto entry_it { used_source_adapter_ids_per_adapter_for_group.find(to_string(adapter_id)) };
+          if (entry_it != std::end(used_source_adapter_ids_per_adapter_for_group)) {
+            return entry_it->second;
+          }
+
+          return boost::none;
+        };
+
         for (const std::string &device_id : group) {
-          auto device_topology_it { current_topology.find(device_id) };
-          if (device_topology_it == std::end(current_topology)) {
-            BOOST_LOG(error) << "device " << device_id << " does not exist in the current topology!";
+          auto topology_data_it { topology_data.find(device_id) };
+          if (topology_data_it == std::end(topology_data)) {
+            BOOST_LOG(error) << "device " << device_id << " does not exist in the available topology data!";
             return {};
           }
 
-          const auto path_index { device_topology_it->second };
-          preexisting_topology[device_id] = { group_id, path_index };
-        }
+          std::size_t selected_path_index {};
+          const auto &device_data { topology_data_it->second };
 
-        group_id++;
-      }
-
-      return preexisting_topology;
-    }
-
-    struct updated_topology_t {
-      boost::variant<UINT32, DISPLAYCONFIG_PATH_INFO> group_id_or_path;
-      std::size_t path_index;
-    };
-    using updated_topology_info_map_t = std::unordered_map<std::string, updated_topology_t>;
-
-    /*!
-     * Similar to "make_preexisting_topology", the only difference is that we try
-     * to preserve information from active paths.
-     */
-    updated_topology_info_map_t
-    make_updated_topology(const active_topology_t &new_topology, const device_topology_map_t &current_topology, const std::vector<DISPLAYCONFIG_PATH_INFO> &paths) {
-      UINT32 group_id { 0 };
-      std::unordered_map<std::string, std::unordered_set<UINT32>> taken_source_ids;
-      updated_topology_info_map_t updated_topology;
-
-      for (const auto &group : new_topology) {
-        int inactive_devices_per_group { 0 };
-
-        // First we want to save path info from already active devices
-        for (const std::string &device_id : group) {
-          auto device_topology_it { current_topology.find(device_id) };
-          if (device_topology_it == std::end(current_topology)) {
-            BOOST_LOG(error) << "device " << device_id << " does not exist in the current topology!";
-            return {};
-          }
-
-          const auto path_index { device_topology_it->second };
-          if (!w_utils::is_active(paths.at(path_index))) {
-            continue;
-          }
-
-          updated_topology[device_id] = { paths[path_index], path_index };
-        }
-
-        // Next we want to assign new groups for inactive devices only
-        for (const std::string &device_id : group) {
-          auto device_topology_it { current_topology.find(device_id) };
-          if (device_topology_it == std::end(current_topology)) {
-            BOOST_LOG(error) << "device " << device_id << " does not exist in the current topology!";
-            return {};
-          }
-
-          const auto path_index { device_topology_it->second };
-          if (w_utils::is_active(paths.at(path_index))) {
-            continue;
-          }
-
-          updated_topology[device_id] = { group_id, path_index };
-          inactive_devices_per_group++;
-        }
-
-        // In case we have duplicated displays with inactive devices we now want to discard the active device path infomation
-        // completely and let Windows take care of it. We just need to make sure they have the same group id.
-        if (inactive_devices_per_group > 1) {
-          for (const std::string &device_id : group) {
-            auto info_it { updated_topology.find(device_id) };
-            if (info_it == std::end(updated_topology)) {
-              // Sanity check
-              BOOST_LOG(error) << "device " << device_id << " does not exist in the updated topology!";
+          const auto used_source_id { get_already_used_source_id_in_group(device_data.source_adapter_id) };
+          if (used_source_id) {
+            // Some device in the group is already using the source id and we belong to the same adapter.
+            // This means we must also use the path with the same source id.
+            auto path_source_it { device_data.source_id_to_path_index.find(*used_source_id) };
+            if (path_source_it == std::end(device_data.source_id_to_path_index)) {
+              BOOST_LOG(error) << "device " << device_id << " does not have a path with a source id " << *used_source_id << "!";
               return {};
             }
 
-            info_it->second.group_id_or_path = group_id;
+            selected_path_index = path_source_it->second;
           }
+          else {
+            // Here we want to select a path index that has the lowest index (the "best" of paths), but only
+            // if the source id is still free. Technically we don't need to find the lowest index, but that's
+            // what will match the Windows' behaviour the closest if we need to create new topology in the end.
+            boost::optional<std::size_t> path_index_candidate;
+            UINT32 used_source_id {};
+            for (const auto [source_id, index] : device_data.source_id_to_path_index) {
+              if (is_source_id_already_used(device_data.source_adapter_id, source_id)) {
+                continue;
+              }
+
+              if (!path_index_candidate || index < *path_index_candidate) {
+                path_index_candidate = index;
+                used_source_id = source_id;
+              }
+            }
+
+            if (!path_index_candidate) {
+              // Apparently nvidia GPU can only render 4 different sources at a time (according to Google).
+              // However, it seems to be true only for physical connections as we also have virtual displays.
+              //
+              // Virtual displays have different adapter ids than the physical connection ones, but GPU still
+              // has to render them, so I dunno how this 4 source limitation makes sense then?
+              //
+              // In short, this error should not affect virtual displays when the GPU is at its limit.
+              BOOST_LOG(error) << "device " << device_id << " cannot be enabled as the adapter has no more free source id (GPU limitation)!";
+              return {};
+            }
+
+            selected_path_index = *path_index_candidate;
+            used_source_adapter_ids_per_adapter[to_string(device_data.source_adapter_id)].insert(used_source_id);
+            used_source_adapter_ids_per_adapter_for_group[to_string(device_data.source_adapter_id)] = used_source_id;
+          }
+
+          auto selected_path { paths.at(selected_path_index) };
+
+          // All the indexes must be cleared and only the group id specified
+          w_utils::set_source_index(selected_path, boost::none);
+          w_utils::set_target_index(selected_path, boost::none);
+          w_utils::set_desktop_index(selected_path, boost::none);
+          w_utils::set_clone_group_id(selected_path, group_id);
+          w_utils::set_active(selected_path);  // We also need to mark it as active...
+
+          new_paths.push_back(selected_path);
         }
 
         group_id++;
       }
 
-      return updated_topology;
+      return new_paths;
     }
 
     /*!
      * Try to set to the new topology.
+     *
      * Either by trying to reuse preexisting ones or creating a new
      * topology that Windows has never seen before.
+     *
+     * In both cases we are not handling mode information - we are asking Windows to
+     * select the previously known modes from DB or create the "best" modes for a
+     * new topology.
      */
     bool
     do_set_topology(const active_topology_t &new_topology) {
@@ -180,92 +220,29 @@ namespace display_device {
         return false;
       }
 
-      const auto current_topology { make_valid_topology_map(display_data->paths) };
-      if (current_topology.empty()) {
+      const auto topology_data { make_device_topology_data(display_data->paths) };
+      if (topology_data.empty()) {
         // Error already logged
         return false;
       }
 
-      const auto clear_path_data = [&]() {
-        // These fields need to be cleared (according to MSDOCS) for devices we want to deactivate or modify.
-        // When modifying, we will restore some of them.
-        for (auto &path : display_data->paths) {
-          w_utils::set_source_index(path, boost::none);
-          w_utils::set_target_index(path, boost::none);
-          w_utils::set_desktop_index(path, boost::none);
-          w_utils::set_clone_group_id(path, boost::none);
-          w_utils::set_inactive(path);
-          w_utils::clear_path_refresh_rate(path);
-        }
-      };
+      auto paths { make_new_paths_for_topology(new_topology, topology_data, display_data->paths) };
+      if (paths.empty()) {
+        // Error already logged
+        return false;
+      }
 
-      // Try to reuse existing topology settings from Windows first
-      {
-        const auto preexisting_topology { make_preexisting_topology(new_topology, current_topology) };
-        if (preexisting_topology.empty()) {
-          BOOST_LOG(error) << "could not make preexisting topology info!";
+      UINT32 flags { SDC_APPLY | SDC_TOPOLOGY_SUPPLIED | SDC_ALLOW_PATH_ORDER_CHANGES | SDC_VIRTUAL_MODE_AWARE };
+      LONG result { SetDisplayConfig(paths.size(), paths.data(), 0, nullptr, flags) };
+      if (result != ERROR_SUCCESS) {
+        BOOST_LOG(warning) << w_utils::get_ccd_error_string(result) << " failed to change topology using the topology from Windows DB! Trying to make Windows create the topology.";
+
+        flags = SDC_VALIDATE | SDC_USE_SUPPLIED_DISPLAY_CONFIG | SDC_ALLOW_CHANGES /* This flag is probably not needed, but who knows really... (not MSDOCS at least) */ | SDC_VIRTUAL_MODE_AWARE | SDC_SAVE_TO_DATABASE;
+        result = SetDisplayConfig(paths.size(), paths.data(), 0, nullptr, flags);
+        if (result != ERROR_SUCCESS) {
+          BOOST_LOG(error) << w_utils::get_ccd_error_string(result) << " failed to create new topology configuration!";
           return false;
         }
-
-        clear_path_data();
-        for (const auto &topology : preexisting_topology) {
-          const auto &info { topology.second };
-          auto &path { display_data->paths.at(info.path_index) };
-
-          // For Windows to find existing topology we need to only set the group id and mark the device as active
-          w_utils::set_clone_group_id(path, info.group_id);
-          w_utils::set_active(path);
-        }
-
-        const UINT32 validate_flags { SDC_VALIDATE | SDC_TOPOLOGY_SUPPLIED | SDC_ALLOW_PATH_ORDER_CHANGES | SDC_VIRTUAL_MODE_AWARE };
-        const UINT32 apply_flags { SDC_APPLY | SDC_TOPOLOGY_SUPPLIED | SDC_ALLOW_PATH_ORDER_CHANGES | SDC_VIRTUAL_MODE_AWARE };
-
-        LONG result { SetDisplayConfig(display_data->paths.size(), display_data->paths.data(), 0, nullptr, validate_flags) };
-        if (result == ERROR_SUCCESS) {
-          result = SetDisplayConfig(display_data->paths.size(), display_data->paths.data(), 0, nullptr, apply_flags);
-          if (result != ERROR_SUCCESS) {
-            BOOST_LOG(error) << w_utils::get_ccd_error_string(result) << " failed to change topology using supplied topology!";
-            return false;
-          }
-          else {
-            return true;
-          }
-        }
-        else {
-          BOOST_LOG(info) << w_utils::get_ccd_error_string(result) << " failed to change topology using supplied topology! Trying to update topology next.";
-        }
-      }
-
-      // Try to create new/updated topology and save it to the Windows' database
-      const auto updated_topology_info { make_updated_topology(new_topology, current_topology, display_data->paths) };
-      if (updated_topology_info.empty()) {
-        BOOST_LOG(error) << "could not make updated topology info!";
-        return false;
-      }
-
-      clear_path_data();
-      for (const auto &updated_topology : updated_topology_info) {
-        const auto &info { updated_topology.second };
-        auto &path { display_data->paths[info.path_index] };
-
-        if (const UINT32 *group_id = boost::get<UINT32>(&info.group_id_or_path)) {
-          // Same as when trying to reuse topology - let Windows handle it. Specify
-          // the group id which indicates just that + mark the device as active
-          w_utils::set_clone_group_id(path, *group_id);
-          w_utils::set_active(path);
-        }
-        else if (const auto *saved_path = boost::get<DISPLAYCONFIG_PATH_INFO>(&info.group_id_or_path)) {
-          // The device will not be duplicated so let's just preserve the path data
-          // from the current topology
-          path = *saved_path;
-        }
-      }
-
-      const UINT32 apply_flags { SDC_APPLY | SDC_USE_SUPPLIED_DISPLAY_CONFIG | SDC_VIRTUAL_MODE_AWARE | SDC_SAVE_TO_DATABASE };
-      const LONG result { SetDisplayConfig(display_data->paths.size(), display_data->paths.data(), display_data->modes.size(), display_data->modes.data(), apply_flags) };
-      if (result != ERROR_SUCCESS) {
-        BOOST_LOG(error) << w_utils::get_ccd_error_string(result) << " failed to change topology using supplied display config!";
-        return false;
       }
 
       return true;
@@ -282,16 +259,14 @@ namespace display_device {
     }
 
     device_info_map_t available_devices;
-    const auto current_topology { make_valid_topology_map(display_data->paths) };
-    if (current_topology.empty()) {
+    const auto topology_data { make_device_topology_data(display_data->paths) };
+    if (topology_data.empty()) {
       // Error already logged
       return {};
     }
 
-    for (const auto &topology : current_topology) {
-      const auto &device_id { topology.first };
-      const auto path_index { topology.second };
-      const auto &path { display_data->paths.at(path_index) };
+    for (const auto &[device_id, data] : topology_data) {
+      const auto &path { display_data->paths.at(data.get_best_path_index()) };
 
       if (w_utils::is_active(path)) {
         const auto mode { w_utils::get_source_mode(w_utils::get_source_index(path, display_data->modes), display_data->modes) };
@@ -305,7 +280,7 @@ namespace display_device {
       }
       else {
         available_devices[device_id] = device_info_t {
-          std::string {},  // Inactive device can have multiple display names, so it's just meaningless
+          std::string {},  // Inactive devices can have multiple display names, so it's just meaningless
           w_utils::get_friendly_name(path),
           device_state_e::inactive,
           hdr_state_e::unknown
