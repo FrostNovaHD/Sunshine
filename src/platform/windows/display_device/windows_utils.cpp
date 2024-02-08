@@ -202,18 +202,6 @@ namespace display_device {
       path.flags |= DISPLAYCONFIG_PATH_ACTIVE;
     }
 
-    void
-    set_inactive(DISPLAYCONFIG_PATH_INFO &path) {
-      path.flags &= ~DISPLAYCONFIG_PATH_ACTIVE;
-    }
-
-    void
-    clear_path_refresh_rate(DISPLAYCONFIG_PATH_INFO &path) {
-      path.targetInfo.refreshRate.Denominator = 0;
-      path.targetInfo.refreshRate.Numerator = 0;
-      path.targetInfo.scanLineOrdering = DISPLAYCONFIG_SCANLINE_ORDERING_UNSPECIFIED;
-    }
-
     std::string
     get_device_id(const DISPLAYCONFIG_PATH_INFO &path) {
       const auto device_path { get_monitor_device_path_wstr(path) };
@@ -421,30 +409,6 @@ namespace display_device {
       return index;
     }
 
-    boost::optional<UINT32>
-    get_target_index(const DISPLAYCONFIG_PATH_INFO &path, const std::vector<DISPLAYCONFIG_MODE_INFO> &modes) {
-      UINT32 index {};
-      if (path.flags & DISPLAYCONFIG_PATH_SUPPORT_VIRTUAL_MODE) {
-        index = path.targetInfo.targetModeInfoIdx;
-        if (index == DISPLAYCONFIG_PATH_TARGET_MODE_IDX_INVALID) {
-          return boost::none;
-        }
-      }
-      else {
-        index = path.targetInfo.modeInfoIdx;
-        if (index == DISPLAYCONFIG_PATH_MODE_IDX_INVALID) {
-          return boost::none;
-        }
-      }
-
-      if (index >= modes.size()) {
-        BOOST_LOG(error) << "target index " << index << " is out of range " << modes.size();
-        return boost::none;
-      }
-
-      return index;
-    }
-
     void
     set_source_index(DISPLAYCONFIG_PATH_INFO &path, const boost::optional<UINT32> &index) {
       if (path.flags & DISPLAYCONFIG_PATH_SUPPORT_VIRTUAL_MODE) {
@@ -527,26 +491,6 @@ namespace display_device {
     DISPLAYCONFIG_SOURCE_MODE *
     get_source_mode(const boost::optional<UINT32> &index, std::vector<DISPLAYCONFIG_MODE_INFO> &modes) {
       return const_cast<DISPLAYCONFIG_SOURCE_MODE *>(get_source_mode(index, const_cast<const std::vector<DISPLAYCONFIG_MODE_INFO> &>(modes)));
-    }
-
-    const DISPLAYCONFIG_TARGET_MODE *
-    get_target_mode(const boost::optional<UINT32> &index, const std::vector<DISPLAYCONFIG_MODE_INFO> &modes) {
-      if (!index) {
-        return nullptr;
-      }
-
-      const auto &mode { modes[*index] };
-      if (mode.infoType != DISPLAYCONFIG_MODE_INFO_TYPE_TARGET) {
-        BOOST_LOG(error) << "mode at index " << *index << " is not target mode!";
-        return nullptr;
-      }
-
-      return &mode.targetMode;
-    }
-
-    DISPLAYCONFIG_TARGET_MODE *
-    get_target_mode(const boost::optional<UINT32> &index, std::vector<DISPLAYCONFIG_MODE_INFO> &modes) {
-      return const_cast<DISPLAYCONFIG_TARGET_MODE *>(get_target_mode(index, const_cast<const std::vector<DISPLAYCONFIG_MODE_INFO> &>(modes)));
     }
 
     boost::optional<device_info_t>

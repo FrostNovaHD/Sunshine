@@ -43,12 +43,6 @@ namespace display_device {
     void
     set_active(DISPLAYCONFIG_PATH_INFO &path);
 
-    void
-    set_inactive(DISPLAYCONFIG_PATH_INFO &path);
-
-    void
-    clear_path_refresh_rate(DISPLAYCONFIG_PATH_INFO &path);
-
     std::string
     get_device_id(const DISPLAYCONFIG_PATH_INFO &path);
 
@@ -70,9 +64,6 @@ namespace display_device {
     boost::optional<UINT32>
     get_source_index(const DISPLAYCONFIG_PATH_INFO &path, const std::vector<DISPLAYCONFIG_MODE_INFO> &modes);
 
-    boost::optional<UINT32>
-    get_target_index(const DISPLAYCONFIG_PATH_INFO &path, const std::vector<DISPLAYCONFIG_MODE_INFO> &modes);
-
     void
     set_source_index(DISPLAYCONFIG_PATH_INFO &path, const boost::optional<UINT32> &index);
 
@@ -90,12 +81,6 @@ namespace display_device {
 
     DISPLAYCONFIG_SOURCE_MODE *
     get_source_mode(const boost::optional<UINT32> &index, std::vector<DISPLAYCONFIG_MODE_INFO> &modes);
-
-    const DISPLAYCONFIG_TARGET_MODE *
-    get_target_mode(const boost::optional<UINT32> &index, const std::vector<DISPLAYCONFIG_MODE_INFO> &modes);
-
-    DISPLAYCONFIG_TARGET_MODE *
-    get_target_mode(const boost::optional<UINT32> &index, std::vector<DISPLAYCONFIG_MODE_INFO> &modes);
 
     boost::optional<device_info_t>
     get_device_info_for_valid_path(const DISPLAYCONFIG_PATH_INFO &path, bool must_be_active);
