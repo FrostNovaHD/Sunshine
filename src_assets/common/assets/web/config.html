@@ -471,14 +471,14 @@
         <div class="mb-3" v-if="platform === 'windows'">
           <label for="output_name" class="form-label">Display Device Id</label>
           <input type="text" class="form-control" id="output_name"
-            placeholder="\\?\DISPLAY-ACI27EC-5&4fd2de4&2&UID4355-{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}"
+            placeholder="{de9bb7e2-186e-505b-9e93-f48793333810}"
             v-model="config.output_name" />
           <div class="form-text">
             Manually specify a display device id to use for capture. If unset, the primary display is captured.<br>
             Note: If you specified a GPU above, this display must be connected to that GPU.<br>
             <br>
             During Sunshine startup, you should see the list of detected display devices and their ids, e.g.:<br>
-            <b>&nbsp;&nbsp;&nbsp;&nbsp;DEVICE ID: \\?\DISPLAY-ACI27EC-5&4fd2de4&2&UID4355-{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}</b><br>
+            <b>&nbsp;&nbsp;&nbsp;&nbsp;DEVICE ID: {de9bb7e2-186e-505b-9e93-f48793333810}</b><br>
             <b>&nbsp;&nbsp;&nbsp;&nbsp;DISPLAY NAME: \\.\DISPLAY1</b><br>
             <b>&nbsp;&nbsp;&nbsp;&nbsp;FRIENDLY NAME: ROG PG279Q</b><br>
             <b>&nbsp;&nbsp;&nbsp;&nbsp;DEVICE STATE: PRIMARY</b><br>
@@ -522,10 +522,10 @@
                   <div class="form-text">
                     Windows saves various display settings for each combination of currently active displays.<br>
                     Sunshine applies changes to a display(-s) belonging to such a display combination.<br>
-                    If you disconnect a device which was active when Sunshine applied the settings, the changes will not be reverted<br>
-                    back unless the combination is active again by the time Sunshine tries to revert changes!<br>
-                    The same is true if you connect a new device and Windows decides to activate it, which will<br>
-                    change the active display combination.
+                    If you disconnect a device which was active when Sunshine applied the settings, the changes will not be<br>
+                    reverted back unless the combination is active again by the time Sunshine tries to revert changes!<br>
+                    The same is true if you connect a new device and Windows decides to activate it, which will change<br>
+                    the active display combination.
                   </div>
                 </div>
                 
