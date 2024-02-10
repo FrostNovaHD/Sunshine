@@ -29,11 +29,13 @@ namespace display_device {
 
   settings_t::apply_result_t
   session_t::configure_display(const config::video_t &config, const rtsp_stream::launch_session_t &session) {
+    std::lock_guard lock { mutex };
     return settings.apply_config(config, session);
   }
 
   void
   session_t::restore_state() {
+    std::lock_guard lock { mutex };
     return settings.revert_settings();
   }
 
