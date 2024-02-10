@@ -1,5 +1,8 @@
 #pragma once
 
+// standard includes
+#include <mutex>
+
 // local includes
 #include "settings.h"
 
@@ -45,6 +48,8 @@ namespace display_device {
   private:
     explicit session_t() = default;
     settings_t settings;
+
+    std::mutex mutex;
   };
 
 }  // namespace display_device
