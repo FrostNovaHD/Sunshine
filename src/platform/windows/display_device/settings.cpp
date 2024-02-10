@@ -4,6 +4,7 @@
 
 // local includes
 #include "settings_topology.h"
+#include "src/audio.h"
 #include "src/display_device/to_string.h"
 #include "src/logging.h"
 
@@ -166,6 +167,11 @@ namespace display_device {
 
   }  // namespace
 
+  //! A simple struct that automatically captures the audio ctx reference.
+  struct settings_t::audio_data_t {
+    decltype(audio::get_audio_ctx_ref()) audio_ctx_ref { audio::get_audio_ctx_ref() };
+  };
+
   settings_t::settings_t() {
   }
 
@@ -179,7 +185,25 @@ namespace display_device {
       return { apply_result_t::result_e::config_parse_fail };
     }
 
-    return apply_config(*parsed_config);
+    const bool display_may_change { parsed_config->device_prep == parsed_config_t::device_prep_e::ensure_only_display };
+    if (display_may_change && !audio_data) {
+      // It is very likely that in this situation our "current" audio device will be gone, so we
+      // want to capture the audio sink immediately and extend the session until we revert our changes
+      BOOST_LOG(debug) << "Capturing audio sink before changing display";
+      audio_data = std::make_unique<audio_data_t>();
+    }
+
+    const auto result { apply_config(*parsed_config) };
+    if (result) {
+      if (!display_may_change && audio_data) {
+        // Just to be safe in the future when the video config can be reloaded
+        // without Sunshine restarting, we should cleanup
+        BOOST_LOG(debug) << "Releasing captured audio sink";
+        audio_data = nullptr;
+      }
+    }
+
+    return result;
   }
 
   settings_t::apply_result_t
@@ -197,7 +221,11 @@ namespace display_device {
 
     const boost::optional<topology_data_t> previously_configured_topology { data ? boost::make_optional(data->topology) : boost::none };
     const auto topology_result { handle_device_topology_configuration(config, previously_configured_topology, [&]() {
+      const bool audio_sink_was_captured { audio_data != nullptr };
       revert_settings();
+      if (audio_sink_was_captured && !audio_data) {
+        audio_data = std::make_unique<audio_data_t>();
+      }
     }) };
     if (!topology_result) {
       // Error already logged
@@ -286,6 +314,11 @@ namespace display_device {
       revert_settings(*data);
       remove_file(filepath);
       data = nullptr;
+    }
+
+    if (audio_data) {
+      BOOST_LOG(debug) << "Releasing captured audio sink";
+      audio_data = nullptr;
     }
   }
 

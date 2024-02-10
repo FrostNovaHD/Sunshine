@@ -75,6 +75,10 @@ namespace display_device {
     return false;
   }
 
+  struct settings_t::audio_data_t {
+    // Not implemented
+  };
+
   struct settings_t::data_t {
     // Not implemented
   };

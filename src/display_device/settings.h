@@ -70,6 +70,10 @@ namespace display_device {
 
     std::unique_ptr<data_t> data;
     std::filesystem::path filepath;
+
+    //! Platform specific audio object to in case we need to manipulate audio session.
+    struct audio_data_t;
+    std::unique_ptr<audio_data_t> audio_data;
   };
 
 }  // namespace display_device
