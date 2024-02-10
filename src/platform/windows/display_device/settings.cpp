@@ -445,9 +445,12 @@ namespace display_device {
       const auto current_hdr_states { get_current_hdr_states(get_device_ids_from_topology(final_topology)) };
       const auto newly_enabled_devices { get_newly_enabled_devices_from_topology(topology_we_modified, final_topology) };
 
-      BOOST_LOG(info) << "trying to fix HDR states (if needed).";
-      blank_hdr_states(current_hdr_states, newly_enabled_devices);  // Return value ignored
-      set_hdr_states(current_hdr_states);  // Return value ignored
+      // Additional check here just to suppress the log
+      if (!newly_enabled_devices.empty()) {
+        BOOST_LOG(info) << "trying to fix HDR states (if needed).";
+        blank_hdr_states(current_hdr_states, newly_enabled_devices);  // Return value ignored
+        set_hdr_states(current_hdr_states);  // Return value ignored
+      }
     }
   }
 
