@@ -257,7 +257,7 @@ namespace display_device {
           //  b) Either a bus number or has something to do with device capabilities - stable
           //  c) Another ID, somehow tied to adapter (not an adapter ID from path list) - stable
           //  d) Some sort of rotating counter thing, changes after driver reinstall - unstable
-          //  e) Seems to be the same as a target ID from path, it changes based on GPU port - unstable
+          //  e) Seems to be the same as a target ID from path, it changes based on GPU port - semi-stable
           //
           // The instance ID also seems to be a part of the registry key (in case some other info is needed in the future):
           //     HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Enum\DISPLAY\ACI27EC\5&4fd2de4&5&UID4352
@@ -273,22 +273,30 @@ namespace display_device {
             break;
           }
 
-          // We are going to discard the unstable parts of the instance ID and merge the stable parts with the edid buffer
-          auto index = instance_id.find_first_of(L'&', 0);
-          if (index != std::wstring::npos) {
-            index++;
-            index = index < instance_id.size() ? instance_id.find_first_of(L'&', index) : std::wstring::npos;
+          // We are going to discard the unstable parts of the instance ID and merge the stable parts with the edid buffer (if available)
+          auto unstable_part_index = instance_id.find_first_of(L'&', 0);
+          if (unstable_part_index != std::wstring::npos) {
+            unstable_part_index = instance_id.find_first_of(L'&', unstable_part_index + 1);
           }
 
-          if (index == std::wstring::npos) {
-            BOOST_LOG(error) << "failed to split the instance id string " << convert_to_string(instance_id);
+          if (unstable_part_index == std::wstring::npos) {
+            BOOST_LOG(error) << "failed to split off the stable part from instance id string " << convert_to_string(instance_id);
             break;
           }
 
-          BOOST_LOG(verbose) << "creating device id for path " << convert_to_string(device_path) << " from EDID and instance ID: " << convert_to_string({ std::begin(instance_id), std::begin(instance_id) + index });
+          auto semi_stable_part_index = instance_id.find_first_of(L'&', unstable_part_index + 1);
+          if (semi_stable_part_index == std::wstring::npos) {
+            BOOST_LOG(error) << "failed to split off the semi-stable part from instance id string " << convert_to_string(instance_id);
+            break;
+          }
+
+          BOOST_LOG(verbose) << "creating device id for path " << convert_to_string(device_path) << " from EDID and instance ID: " << convert_to_string({ std::begin(instance_id), std::begin(instance_id) + unstable_part_index }) << convert_to_string({ std::begin(instance_id) + semi_stable_part_index, std::end(instance_id) });
           device_id_data.insert(std::end(device_id_data),
             reinterpret_cast<const BYTE *>(instance_id.data()),
-            reinterpret_cast<const BYTE *>(instance_id.data() + index));
+            reinterpret_cast<const BYTE *>(instance_id.data() + unstable_part_index));
+          device_id_data.insert(std::end(device_id_data),
+            reinterpret_cast<const BYTE *>(instance_id.data() + semi_stable_part_index),
+            reinterpret_cast<const BYTE *>(instance_id.data() + instance_id.size()));
           break;
         }
       }
