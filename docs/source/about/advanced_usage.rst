@@ -635,21 +635,27 @@ keybindings
 
          .. code-block:: text
 
-            DEVICE ID: \\?\DISPLAY-ACI27EC-5&4fd2de4&2&UID4355-{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}
+            DEVICE ID: {de9bb7e2-186e-505b-9e93-f48793333810}
             DISPLAY NAME: \\.\DISPLAY1
             FRIENDLY NAME: ROG PG279Q
             DEVICE STATE: PRIMARY
             HDR STATE: UNKNOWN
             -----------------------
-            DEVICE ID: \\?\DISPLAY-LNX0000-1&28a6823a&4&UID256-{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}
+            DEVICE ID: {3bd008cd-0465-547c-8da5-c28749c041e6}
             DISPLAY NAME: NOT AVAILABLE
             FRIENDLY NAME: IDD HDR
             DEVICE STATE: INACTIVE
             HDR STATE: UNKNOWN
             -----------------------
-            DEVICE ID: \\?\DISPLAY-XMD009A-5&4fd2de4&2&UID4354-{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}
+            DEVICE ID: {77f67f3e-754f-5d31-af64-ee037e18100a}
             DISPLAY NAME: NOT AVAILABLE
-            FRIENDLY NAME: Mi TV
+            FRIENDLY NAME: SunshineHDR
+            DEVICE STATE: INACTIVE
+            HDR STATE: UNKNOWN
+            -----------------------
+            DEVICE ID: {bc172e6d-86eb-5851-aeca-56525ed716e9}
+            DISPLAY NAME: NOT AVAILABLE
+            FRIENDLY NAME: ROG PG279Q
             DEVICE STATE: INACTIVE
             HDR STATE: UNKNOWN
 
@@ -669,7 +675,7 @@ keybindings
    **Windows**
       .. code-block:: text
 
-         output_name  = \\?\DISPLAY-LNX0000-1&28a6823a&4&UID256-{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}
+         output_name = {de9bb7e2-186e-505b-9e93-f48793333810}
 
 `resolutions <https://localhost:47990/config/#resolutions>`__
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

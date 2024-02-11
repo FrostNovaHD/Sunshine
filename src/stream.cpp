@@ -1842,7 +1842,7 @@ namespace stream {
           system_tray::update_tray_pausing(proc::proc.get_last_run_app_name());
 #endif
 
-          // TODO: cgutman said he would make it configurable per app
+          // TODO: make this configurable per app
           restore_display_state = false;
         }
 
