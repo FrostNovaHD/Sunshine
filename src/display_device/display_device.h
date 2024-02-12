@@ -102,7 +102,8 @@ namespace display_device {
   /**
    * @brief A LIST[LIST[DEVICE_ID]] structure which represents an active topology.
    * @note On Windows the order does not matter of both device ids or the inner lists.
-   * @example
+   * 
+   * EXAMPLES:
    * ```cpp
    * Single display:
    *     [[DISPLAY_1]]
@@ -120,7 +121,8 @@ namespace display_device {
    * @brief Enumerate the available (active and inactive) devices.
    * @returns A map of available devices.
    *          Empty map can also be returned if an error has occurred.
-   * @example
+   * 
+   * EXAMPLES:
    * ```cpp
    * const auto devices { enum_available_devices() };
    * BOOST_LOG(info) << to_string(devices);
@@ -135,8 +137,8 @@ namespace display_device {
    * @returns A display name for the device or an empty string if the device is inactive or not found.
    *          Empty string can also be returned if an error has occurred.
    * @see device_info_t
-   * @note returns empty string if the device_id is empty or device is inactive.
-   * @example
+   * 
+   * EXAMPLES:
    * ```cpp
    * const std::string device_id { "MY_DEVICE_ID" };
    * BOOST_LOG(info) << get_display_name(device_id);
@@ -150,7 +152,8 @@ namespace display_device {
    * @param device_ids A list of devices to get the modes for.
    * @returns A map of device modes per a device or an empty map if a mode could not be found (e.g. device is inactive).
    *          Empty map can also be returned if an error has occurred.
-   * @example
+   * 
+   * EXAMPLES:
    * ```cpp
    * const std::unordered_set<std::string> device_ids { "DEVICE_ID_1", "DEVICE_ID_2" };
    * BOOST_LOG(info) << to_string(get_current_display_modes(device_ids));
@@ -165,7 +168,8 @@ namespace display_device {
    * @returns True if modes were set, false otherwise.
    * @warning if any of the specified devices are duplicated, modes modes be provided
    *          for duplicates too!
-   * @example
+   * 
+   * EXAMPLES:
    * ```cpp
    * const std::string display_a { "MY_ID_1" };
    * const std::string display_b { "MY_ID_2" };
@@ -182,7 +186,8 @@ namespace display_device {
    * @param device_id A device to perform the check for.
    * @returns True if the device is primary, false otherwise.
    * @see device_state_e
-   * @example
+   * 
+   * EXAMPLES:
    * ```cpp
    * const std::string device_id { "MY_DEVICE_ID" };
    * BOOST_LOG(info) << device_id << " is primary device: " << is_primary_device(device_id);
@@ -196,7 +201,8 @@ namespace display_device {
    * @param device_id A device to set as primary.
    * @returns True if the device is or was set as primary, false otherwise.
    * @note On Windows if the device is duplicated, the other duplicated device(-s) will also become a primary device.
-   * @example
+   * 
+   * EXAMPLES:
    * ```cpp
    * const std::string device_id { "MY_DEVICE_ID" };
    * BOOST_LOG(info) << device_id << " was set as a primary device: " << set_as_primary_device(device_id);
@@ -210,7 +216,8 @@ namespace display_device {
    * @param device_ids A list of devices to get the HDR states for.
    * @returns A map of HDR states per a device or an empty map if an error has occurred.
    * @note On Windows the state cannot be retrieved until the device is active even if it supports it.
-   * @example
+   * 
+   * EXAMPLES:
    * ```cpp
    * const std::unordered_set<std::string> device_ids { "DEVICE_ID_1", "DEVICE_ID_2" };
    * BOOST_LOG(info) << to_string(get_current_hdr_states(device_ids));
@@ -225,7 +232,8 @@ namespace display_device {
    * @returns True if HDR states were set, false otherwise.
    * @note If `unknown` states are provided, they will be silently ignored
    *       and current state will not be changed.
-   * @example
+   * 
+   * EXAMPLES:
    * ```cpp
    * const std::string display_a { "MY_ID_1" };
    * const std::string display_b { "MY_ID_2" };
@@ -241,7 +249,8 @@ namespace display_device {
    * @brief Get the active (current) topology.
    * @returns A list representing the current topology.
    *          Empty list can also be returned if an error has occurred.
-   * @example
+   * 
+   * EXAMPLES:
    * ```cpp
    * const auto current_topology { get_current_topology() };
    * BOOST_LOG(info) << to_string(current_topology);
@@ -253,11 +262,13 @@ namespace display_device {
   /**
    * @brief Verify if the active topology is valid.
    *
-   * This is mostly meant as a sanity check or to verify that it is still valid after manual modification to an existing topology.
+   * This is mostly meant as a sanity check or to verify that it is still valid
+   * after a manual modification to an existing topology.
    *
    * @param topology Topology to validated.
    * @returns True if it is valid, false otherwise.
-   * @example
+   * 
+   * EXAMPLES:
    * ```cpp
    * auto current_topology { get_current_topology() };
    * // Modify the current_topology
@@ -272,7 +283,8 @@ namespace display_device {
    * @param a First topology to compare.
    * @param b Second topology to compare.
    * @returns True if topologies are close enough, false otherwise.
-   * @example
+   * 
+   * EXAMPLES:
    * ```cpp
    * auto current_topology { get_current_topology() };
    * auto new_topology { current_topology };
@@ -287,7 +299,8 @@ namespace display_device {
    * @brief Set the a new active topology for the OS.
    * @param new_topology New device topology to set.
    * @returns True if the new topology has been set, false otherwise.
-   * @example
+   * 
+   * EXAMPLES:
    * ```cpp
    * auto current_topology { get_current_topology() };
    * // Modify the current_topology
