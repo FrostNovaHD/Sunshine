@@ -12,14 +12,21 @@
 
 namespace display_device {
 
+  /**
+   * @brief The device state in the operating system.
+   * @note On Windows you can have have multiple primary displays when they are duplicated.
+   */
   enum class device_state_e {
     inactive,
     active,
-    primary  //! On Windows we can have multiple primary displays (when they are duplicated).
+    primary /**< Primary state is also implicitly active. */
   };
 
+  /**
+   * @brief The device's HDR state in the operating system.
+   */
   enum class hdr_state_e {
-    unknown,  //! HDR state could not be retrieved from the system (even if the display could support it).
+    unknown, /**< HDR state could not be retrieved from the OS (even if the display supports it). */
     disabled,
     enabled
   };
@@ -29,26 +36,30 @@ namespace display_device {
                                               { hdr_state_e::disabled, "disabled" },
                                               { hdr_state_e::enabled, "enabled" } })
 
-  //! A map of device id to its HDR state (ordered, for predictable print order)
+  /**
+   * @brief Ordered map of [DEVICE_ID -> hdr_state_e].
+   */
   using hdr_state_map_t = std::map<std::string, hdr_state_e>;
 
+  /**
+   * @brief The device's HDR state in the operating system.
+   */
   struct device_info_t {
-    //! A name used by the system to represent the logical display this device is connected to.
-    std::string display_name;
-
-    //! A more human-readable name for the device.
-    std::string friendly_name;
-
-    //! Current state of the device.
-    device_state_e device_state;
-
-    //! Current state of the HDR support.
-    hdr_state_e hdr_state;
+    std::string display_name; /**< A name representing the OS display (source) the device is connected to. */
+    std::string friendly_name; /**< A human-readable name for the device. */
+    device_state_e device_state; /**< Device's state. @see device_state_e */
+    hdr_state_e hdr_state; /**< Device's HDR state. @see hdr_state_e */
   };
 
-  //! A map of device id to its info data (ordered, for predictable print order).
+  /**
+   * @brief Ordered map of [DEVICE_ID -> device_info_t].
+   * @see device_info_t
+   */
   using device_info_map_t = std::map<std::string, device_info_t>;
 
+  /**
+   * @brief Display's resolution.
+   */
   struct resolution_t {
     unsigned int width;
     unsigned int height;
@@ -57,7 +68,10 @@ namespace display_device {
     NLOHMANN_DEFINE_TYPE_INTRUSIVE(resolution_t, width, height)
   };
 
-  //! Stores a floating point number in a "numerator/denominator" form
+  /**
+   * @brief Display's refresh rate.
+   * @note Floating point is stored in a "numerator/denominator" form.
+   */
   struct refresh_rate_t {
     unsigned int numerator;
     unsigned int denominator;
@@ -66,6 +80,11 @@ namespace display_device {
     NLOHMANN_DEFINE_TYPE_INTRUSIVE(refresh_rate_t, numerator, denominator)
   };
 
+  /**
+   * @brief Display's mode (resolution + refresh rate).
+   * @see resolution_t
+   * @see refresh_rate_t
+   */
   struct display_mode_t {
     resolution_t resolution;
     refresh_rate_t refresh_rate;
@@ -74,107 +93,206 @@ namespace display_device {
     NLOHMANN_DEFINE_TYPE_INTRUSIVE(display_mode_t, resolution, refresh_rate)
   };
 
-  // A map of device id to its mode data (ordered, for predictable print order).
+  /**
+   * @brief Ordered map of [DEVICE_ID -> display_mode_t].
+   * @see display_mode_t
+   */
   using device_display_mode_map_t = std::map<std::string, display_mode_t>;
 
-  /*!
-   * A list of a list of device ids representing the current topology.
-   *
-   * For example:
+  /**
+   * @brief A LIST[LIST[DEVICE_ID]] structure which represents an active topology.
+   * @note On Windows the order does not matter of both device ids or the inner lists.
+   * @example
+   * ```cpp
+   * Single display:
+   *     [[DISPLAY_1]]
+   * 2 extended displays:
+   *     [[DISPLAY_1], [DISPLAY_2]]
+   * 2 duplicated displays:
+   *     [[DISPLAY_1, DISPLAY_2]]
+   * Mixed displays:
+   *     [[EXTENDED_DISPLAY_1], [DUPLICATED_DISPLAY_1, DUPLICATED_DISPLAY_2], [EXTENDED_DISPLAY_2]]
    * ```
-   * [[EXTENDED_DISPLAY_1], [DUPLICATED_DISPLAY_1, DUPLICATED_DISPLAY_2], [EXTENDED_DISPLAY_2]]
-   * ```
-   *
-   * @note On Windows the order does not matter as Windows will take care of the device the placement anyway.
    */
   using active_topology_t = std::vector<std::vector<std::string>>;
 
-  /*!
-   * Enumerates the available devices in the system.
+  /**
+   * @brief Enumerate the available (active and inactive) devices.
+   * @returns A map of available devices.
+   *          Empty map can also be returned if an error has occurred.
+   * @example
+   * ```cpp
+   * const auto devices { enum_available_devices() };
+   * BOOST_LOG(info) << to_string(devices);
+   * ```
    */
   device_info_map_t
   enum_available_devices();
 
-  /*!
-   * Gets display name associated with the device.
+  /**
+   * @brief Get display name associated with the device.
+   * @param device_id A device to get display name for.
+   * @returns A display name for the device or an empty string if the device is inactive or not found.
+   *          Empty string can also be returned if an error has occurred.
+   * @see device_info_t
    * @note returns empty string if the device_id is empty or device is inactive.
+   * @example
+   * ```cpp
+   * const std::string device_id { "MY_DEVICE_ID" };
+   * BOOST_LOG(info) << get_display_name(device_id);
+   * ```
    */
   std::string
   get_display_name(const std::string &device_id);
 
-  /*!
-   * Get current display mode for the provided devices.
-   *
-   * @note empty map will be returned if any of the devices does not have a mode.
+  /**
+   * @brief Get current display modes for the devices.
+   * @param device_ids A list of devices to get the modes for.
+   * @returns A map of device modes per a device or an empty map if a mode could not be found (e.g. device is inactive).
+   *          Empty map can also be returned if an error has occurred.
+   * @example
+   * ```cpp
+   * const std::unordered_set<std::string> device_ids { "DEVICE_ID_1", "DEVICE_ID_2" };
+   * BOOST_LOG(info) << to_string(get_current_display_modes(device_ids));
+   * ```
    */
   device_display_mode_map_t
   get_current_display_modes(const std::unordered_set<std::string> &device_ids);
 
-  /*!
-   * Try to set the new display modes for the devices.
-   *
-   * @warning if any of the specified display are duplicated, modes MUST be provided
+  /**
+   * @brief Set new display modes for the devices.
+   * @param modes A map of modes to set.
+   * @returns True if modes were set, false otherwise.
+   * @warning if any of the specified devices are duplicated, modes modes be provided
    *          for duplicates too!
+   * @example
+   * ```cpp
+   * const std::string display_a { "MY_ID_1" };
+   * const std::string display_b { "MY_ID_2" };
+   * const auto result { set_display_modes({ { display_a, { { 1920, 1080 }, { 60, 1 } } },
+   *                                         { display_b, { { 1920, 1080 }, { 120, 1 } } } }) };
+   * BOOST_LOG(info) << "set_display_modes result: " << result;
+   * ```
    */
   bool
   set_display_modes(const device_display_mode_map_t &modes);
 
-  /*!
-   * Check whether the specified device is primary.
+  /**
+   * @brief Check whether the specified device is primary.
+   * @param device_id A device to perform the check for.
+   * @returns True if the device is primary, false otherwise.
+   * @see device_state_e
+   * @example
+   * ```cpp
+   * const std::string device_id { "MY_DEVICE_ID" };
+   * BOOST_LOG(info) << device_id << " is primary device: " << is_primary_device(device_id);
+   * ```
    */
   bool
   is_primary_device(const std::string &device_id);
 
-  /*!
-   * Try to set the device as a primary display.
-   *
-   * @note if the device is duplicated, the other paired device will also become a primary display.
+  /**
+   * @brief Set the device as a primary display.
+   * @param device_id A device to set as primary.
+   * @returns True if the device is or was set as primary, false otherwise.
+   * @note On Windows if the device is duplicated, the other duplicated device(-s) will also become a primary device.
+   * @example
+   * ```cpp
+   * const std::string device_id { "MY_DEVICE_ID" };
+   * BOOST_LOG(info) << device_id << " was set as a primary device: " << set_as_primary_device(device_id);
+   * ``
    */
   bool
   set_as_primary_device(const std::string &device_id);
 
-  /*!
-   * Try to get the HDR state for the provided devices.
-   *
-   * @note on Windows the state cannot be retrieved until the device is active.
+  /**
+   * @brief Get HDR state for the devices.
+   * @param device_ids A list of devices to get the HDR states for.
+   * @returns A map of HDR states per a device or an empty map if an error has occurred.
+   * @note On Windows the state cannot be retrieved until the device is active even if it supports it.
+   * @example
+   * ```cpp
+   * const std::unordered_set<std::string> device_ids { "DEVICE_ID_1", "DEVICE_ID_2" };
+   * BOOST_LOG(info) << to_string(get_current_hdr_states(device_ids));
+   * ```
    */
   hdr_state_map_t
   get_current_hdr_states(const std::unordered_set<std::string> &device_ids);
 
-  /*!
-   * Try to set the HDR state for the devices.
-   *
-   * @note if UNKNOWN states are provided, they will be ignored.
+  /**
+   * @brief Set HDR states for the devices.
+   * @param modes A map of HDR states to set.
+   * @returns True if HDR states were set, false otherwise.
+   * @note If `unknown` states are provided, they will be silently ignored
+   *       and current state will not be changed.
+   * @example
+   * ```cpp
+   * const std::string display_a { "MY_ID_1" };
+   * const std::string display_b { "MY_ID_2" };
+   * const auto result { set_hdr_states({ { display_a, hdr_state_e::enabled },
+   *                                      { display_b, hdr_state_e::disabled }) };
+   * BOOST_LOG(info) << "set_hdr_states result: " << result;
+   * ```
    */
   bool
   set_hdr_states(const hdr_state_map_t &states);
 
-  /*!
-   * Get the currently active topology.
-   *
-   * @note empty list will be returned if topology could not be retrieved.
+  /**
+   * @brief Get the active (current) topology.
+   * @returns A list representing the current topology.
+   *          Empty list can also be returned if an error has occurred.
+   * @example
+   * ```cpp
+   * const auto current_topology { get_current_topology() };
+   * BOOST_LOG(info) << to_string(current_topology);
+   * ```
    */
   active_topology_t
   get_current_topology();
 
-  /*!
-   * Simply validates the topology to be valid.
+  /**
+   * @brief Verify if the active topology is valid.
+   *
+   * This is mostly meant as a sanity check or to verify that it is still valid after manual modification to an existing topology.
+   *
+   * @param topology Topology to validated.
+   * @returns True if it is valid, false otherwise.
+   * @example
+   * ```cpp
+   * auto current_topology { get_current_topology() };
+   * // Modify the current_topology
+   * BOOST_LOG(info) << "is valid: " << is_topology_valid(current_topology);
+   * ```
    */
   bool
   is_topology_valid(const active_topology_t &topology);
 
-  /*!
-   * Checks if the topologies are close enough to be considered the same by the system.
+  /**
+   * @brief Checks if the topologies are close enough to be considered the same by the OS.
+   * @param a First topology to compare.
+   * @param b Second topology to compare.
+   * @returns True if topologies are close enough, false otherwise.
+   * @example
+   * ```cpp
+   * auto current_topology { get_current_topology() };
+   * auto new_topology { current_topology };
+   * // Modify the new_topology
+   * BOOST_LOG(info) << "is the same: " << is_topology_the_same(current_topology, new_topology);
+   * ```
    */
   bool
   is_topology_the_same(const active_topology_t &a, const active_topology_t &b);
 
-  /*!
-   * Try to set the active states for the devices.
-   *
-   * @warning there is a bug on Windows (yay) where it is unable to sometimes set
-   *          topology correctly, but it thinks it did! See implementation for more
-   *          details.
+  /**
+   * @brief Set the a new active topology for the OS.
+   * @param new_topology New device topology to set.
+   * @returns True if the new topology has been set, false otherwise.
+   * @example
+   * ```cpp
+   * auto current_topology { get_current_topology() };
+   * // Modify the current_topology
+   * BOOST_LOG(info) << "set new topology: " << set_topology(current_topology);
+   * ```
    */
   bool
   set_topology(const active_topology_t &new_topology);
