@@ -10,6 +10,7 @@
 
 // local includes
 #include "src/logging.h"
+#include "src/platform/windows/misc.h"
 #include "src/utility.h"
 #include "windows_utils.h"
 
@@ -21,16 +22,6 @@ namespace display_device {
   namespace w_utils {
 
     namespace {
-
-      std::string
-      convert_to_string(const std::wstring &str) {
-        if (str.empty()) {
-          return {};
-        }
-
-        std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
-        return conv.to_bytes(str);
-      }
 
       std::wstring
       get_monitor_device_path_wstr(const DISPLAYCONFIG_PATH_INFO &path) {
@@ -280,17 +271,17 @@ namespace display_device {
           }
 
           if (unstable_part_index == std::wstring::npos) {
-            BOOST_LOG(error) << "failed to split off the stable part from instance id string " << convert_to_string(instance_id);
+            BOOST_LOG(error) << "failed to split off the stable part from instance id string " << platf::to_utf8(instance_id);
             break;
           }
 
           auto semi_stable_part_index = instance_id.find_first_of(L'&', unstable_part_index + 1);
           if (semi_stable_part_index == std::wstring::npos) {
-            BOOST_LOG(error) << "failed to split off the semi-stable part from instance id string " << convert_to_string(instance_id);
+            BOOST_LOG(error) << "failed to split off the semi-stable part from instance id string " << platf::to_utf8(instance_id);
             break;
           }
 
-          BOOST_LOG(verbose) << "creating device id for path " << convert_to_string(device_path) << " from EDID and instance ID: " << convert_to_string({ std::begin(instance_id), std::begin(instance_id) + unstable_part_index }) << convert_to_string({ std::begin(instance_id) + semi_stable_part_index, std::end(instance_id) });
+          BOOST_LOG(verbose) << "creating device id for path " << platf::to_utf8(device_path) << " from EDID and instance ID: " << platf::to_utf8({ std::begin(instance_id), std::begin(instance_id) + unstable_part_index }) << platf::to_utf8({ std::begin(instance_id) + semi_stable_part_index, std::end(instance_id) });
           device_id_data.insert(std::end(device_id_data),
             reinterpret_cast<const BYTE *>(instance_id.data()),
             reinterpret_cast<const BYTE *>(instance_id.data() + unstable_part_index));
@@ -303,7 +294,7 @@ namespace display_device {
 
       if (device_id_data.empty()) {
         // Using the device path as a fallback, which is always unique, but not as stable as the preferred one
-        BOOST_LOG(verbose) << "creating device id from path " << convert_to_string(device_path);
+        BOOST_LOG(verbose) << "creating device id from path " << platf::to_utf8(device_path);
         device_id_data.insert(std::end(device_id_data),
           reinterpret_cast<const BYTE *>(device_path.data()),
           reinterpret_cast<const BYTE *>(device_path.data() + device_path.size()));
@@ -316,7 +307,7 @@ namespace display_device {
 
     std::string
     get_monitor_device_path(const DISPLAYCONFIG_PATH_INFO &path) {
-      return convert_to_string(get_monitor_device_path_wstr(path));
+      return platf::to_utf8(get_monitor_device_path_wstr(path));
     }
 
     std::string
@@ -333,7 +324,7 @@ namespace display_device {
         return {};
       }
 
-      return target_name.flags.friendlyNameFromEdid ? convert_to_string(target_name.monitorFriendlyDeviceName) : std::string {};
+      return target_name.flags.friendlyNameFromEdid ? platf::to_utf8(target_name.monitorFriendlyDeviceName) : std::string {};
     }
 
     std::string
@@ -350,7 +341,7 @@ namespace display_device {
         return {};
       }
 
-      return convert_to_string(source_name.viewGdiDeviceName);
+      return platf::to_utf8(source_name.viewGdiDeviceName);
     }
 
     hdr_state_e
