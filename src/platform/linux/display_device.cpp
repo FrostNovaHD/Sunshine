@@ -79,7 +79,7 @@ namespace display_device {
     // Not implemented
   };
 
-  struct settings_t::data_t {
+  struct settings_t::persistent_data_t {
     // Not implemented
   };
 
@@ -103,24 +103,14 @@ namespace display_device {
     return { apply_result_t::result_e::success };
   }
 
-  void
+  bool
   settings_t::revert_settings() {
     // Not implemented
+    return true;
   }
 
   void
-  settings_t::revert_settings(const data_t &) {
-    // Not implemented
-  }
-
-  bool
-  settings_t::save_settings(const data_t &) {
-    // Not implemented
-    return false;
-  }
-
-  void
-  settings_t::load_settings() {
+  settings_t::reset_persistence() {
     // Not implemented
   }
 
