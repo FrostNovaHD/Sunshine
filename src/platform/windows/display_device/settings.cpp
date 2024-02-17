@@ -387,8 +387,6 @@ namespace display_device {
   };
 
   settings_t::settings_t() {
-    BOOST_LOG(info) << "Loading persistent display device settings.";
-    persistent_data = load_settings(filepath);
   }
 
   settings_t::~settings_t() {
@@ -427,6 +425,11 @@ namespace display_device {
 
   bool
   settings_t::revert_settings() {
+    if (!persistent_data) {
+      BOOST_LOG(info) << "Loading persistent display device settings.";
+      persistent_data = load_settings(filepath);
+    }
+
     if (persistent_data) {
       BOOST_LOG(info) << "Reverting display device settings.";
 
@@ -457,7 +460,7 @@ namespace display_device {
   void
   settings_t::reset_persistence() {
     BOOST_LOG(info) << "Purging persistent display device data (trying to reset settings one last time).";
-    if (!revert_settings()) {
+    if (persistent_data && !revert_settings()) {
       BOOST_LOG(info) << "Failed to revert settings - proceeding to reset persistence.";
     }
 
