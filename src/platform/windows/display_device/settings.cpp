@@ -308,7 +308,7 @@ namespace display_device {
           }
         }
         else {
-          BOOST_LOG(warning) << "cannot switch to the topology to undo changes!";
+          BOOST_LOG(error) << "cannot switch to the topology to undo changes!";
           partially_failed = true;
         }
       }
@@ -318,7 +318,7 @@ namespace display_device {
         current_topology = data.topology.initial;
       }
       else {
-        BOOST_LOG(warning) << "failed to switch back to the initial topology!";
+        BOOST_LOG(error) << "failed to switch back to the initial topology!";
         partially_failed = true;
       }
 
