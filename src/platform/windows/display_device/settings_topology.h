@@ -6,7 +6,7 @@
 namespace display_device {
 
   /*!
-   * Here we have 2 topology data items:
+   * Here we have 2 topology data items (TODO: fix description):
    *   - temporary is meant to be used when we fail to change
    *     something and have to revert back to the previous
    *     topology and settings.
@@ -17,8 +17,7 @@ namespace display_device {
    *     the very first changes.
    */
   struct handled_topology_data_t {
-    topology_data_t temporary_topology_data;
-    topology_data_t final_topology_data;
+    topology_data_t topology_data;
     topology_metadata_t metadata;
   };
 
@@ -41,6 +40,6 @@ namespace display_device {
    * On failure it returns empty optional, otherwise topology data is returned.
    */
   boost::optional<handled_topology_data_t>
-  handle_device_topology_configuration(const parsed_config_t &config, boost::optional<topology_data_t> previously_configured_topology, const std::function<void()> &revert_settings);
+  handle_device_topology_configuration(const parsed_config_t &config, const boost::optional<topology_data_t>& previously_configured_topology, const std::function<bool()> &revert_settings);
 
 }  // namespace display_device

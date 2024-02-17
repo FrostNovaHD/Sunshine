@@ -34,14 +34,14 @@ namespace display_device {
    * Data needed for reverting the changes we have made.
    * "Original" settings belong the the modified topology.
    */
-  struct settings_t::data_t {
+  struct settings_t::persistent_data_t {
     topology_data_t topology;
     std::string original_primary_display;
     device_display_mode_map_t original_modes;
     hdr_state_map_t original_hdr_states;
 
     // For JSON serialization
-    NLOHMANN_DEFINE_TYPE_INTRUSIVE(data_t, topology, original_primary_display, original_modes, original_hdr_states)
+    NLOHMANN_DEFINE_TYPE_INTRUSIVE(persistent_data_t, topology, original_primary_display, original_modes, original_hdr_states)
   };
 
 }  // namespace display_device
