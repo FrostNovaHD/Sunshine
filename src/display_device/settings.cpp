@@ -20,8 +20,6 @@ namespace display_device {
         return "Success";
       case result_e::config_parse_fail:
         return "Failed to parse configuration";
-      case result_e::validation_fail:
-        return "Failed to validate display settings";
       case result_e::topology_fail:
         return "Failed to change or validate the display topology";
       case result_e::primary_display_fail:
@@ -32,6 +30,8 @@ namespace display_device {
         return "Failed to set new HDR states";
       case result_e::file_save_fail:
         return "Failed to save the original settings file";
+      case result_e::revert_fail:
+        return "Failed to revert back to the original display settings";
       default:
         BOOST_LOG(fatal) << "result_e conversion not implemented!";
         return "FATAL";

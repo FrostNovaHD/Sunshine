@@ -45,11 +45,20 @@ namespace display_device {
     void
     restore_state();
 
-  private:
-    explicit session_t() = default;
-    settings_t settings;
+    void
+    reset_persistence();
 
+  private:
+    // Forward declaration for a timer that is started whenever we fail to restore the state.
+    class StateRestoreRetryTimer;
+
+    explicit session_t();
+
+    settings_t settings;
     std::mutex mutex;
+
+    // Warning! Must be declared after settings and mutex members!
+    std::unique_ptr<StateRestoreRetryTimer> timer;
   };
 
 }  // namespace display_device

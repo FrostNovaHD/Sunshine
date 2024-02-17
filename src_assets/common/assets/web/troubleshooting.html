@@ -2,38 +2,38 @@
 <html lang="en">
 
 <head>
-      <%- header %>
-      <style>
-        .troubleshooting-logs {
-          white-space: pre;
-          font-family: monospace;
-          overflow: auto;
-          max-height: 500px;
-          min-height: 500px;
-          font-size: 16px;
-          position: relative;
-        }
+  <%- header %>
+    <style>
+      .troubleshooting-logs {
+        white-space: pre;
+        font-family: monospace;
+        overflow: auto;
+        max-height: 500px;
+        min-height: 500px;
+        font-size: 16px;
+        position: relative;
+      }
 
-        .copy-icon {
-          position: absolute;
-          top: 8px;
-          right: 8px;
-          padding: 8px;
-          cursor: pointer;
-          color: rgba(0, 0, 0, 1);
-          appearance: none;
-          border: none;
-          background: none;
-        }
+      .copy-icon {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        padding: 8px;
+        cursor: pointer;
+        color: rgba(0, 0, 0, 1);
+        appearance: none;
+        border: none;
+        background: none;
+      }
 
-        .copy-icon:hover {
-          color: rgba(0, 0, 0, 0.75);
-        }
+      .copy-icon:hover {
+        color: rgba(0, 0, 0, 0.75);
+      }
 
-        .copy-icon:active {
-          color: rgba(0, 0, 0, 1);
-        }
-      </style>
+      .copy-icon:active {
+        color: rgba(0, 0, 0, 1);
+      }
+    </style>
 </head>
 
 <body id="app">
@@ -77,6 +77,30 @@
         <div>
           <button class="btn btn-warning" :disabled="restartPressed" @click="restart">
             Restart Sunshine
+          </button>
+        </div>
+      </div>
+    </div>
+    <!-- Reset persistent display device settings -->
+    <div class="card p-2 my-4" v-if="platform === 'windows'">
+      <div class="card-body">
+        <h2 id="reset_display_device">Reset Persistent Display Device Settings</h2>
+        <br>
+        <p>
+          If Sunshine is stuck trying to restore the changed display device settings,
+          you can reset the settings and proceed to restore the display state manually.
+          This could happen for various reasons: device is no longer available, has been plugged to
+          a different port and so on.
+        </p>
+        <div class="alert alert-success" v-if="resetDisplayDeviceStatus === true">
+          Success resetting persistence!
+        </div>
+        <div class="alert alert-danger" v-if="resetDisplayDeviceStatus === false">
+          Error while resetting persistence!
+        </div>
+        <div>
+          <button class="btn btn-warning" :disabled="resetDisplayDevicePressed" @click="resetDisplayDevicePersistence">
+            Reset Persistence
           </button>
         </div>
       </div>
@@ -128,11 +152,14 @@
       },
       data() {
         return {
+          platform: "",
           closeAppPressed: false,
           closeAppStatus: null,
           unpairAllPressed: false,
           unpairAllStatus: null,
           restartPressed: false,
+          resetDisplayDevicePressed: false,
+          resetDisplayDeviceStatus: null,
           logs: 'Loading...',
           logFilter: null,
           logInterval: null,
@@ -147,6 +174,12 @@
         }
       },
       created() {
+        fetch("/api/config")
+          .then((r) => r.json())
+          .then((r) => {
+            this.platform = r.platform;
+          });
+
         this.logInterval = setInterval(() => {
           this.refreshLogs();
         }, 5000);
@@ -184,6 +217,18 @@
               this.unpairAllStatus = r.status.toString() === "true";
               setTimeout(() => {
                 this.unpairAllStatus = null;
+              }, 5000);
+            });
+        },
+        resetDisplayDevicePersistence() {
+          this.resetDisplayDevicePressed = true;
+          fetch("/api/reset-display-device-persistence", { method: "POST" })
+            .then((r) => r.json())
+            .then((r) => {
+              this.resetDisplayDevicePressed = false;
+              this.resetDisplayDeviceStatus = r.status.toString() === "true";
+              setTimeout(() => {
+                this.resetDisplayDeviceStatus = null;
               }, 5000);
             });
         },
