@@ -101,10 +101,7 @@ namespace display_device {
 
   /**
    * @brief A LIST[LIST[DEVICE_ID]] structure which represents an active topology.
-   * @note On Windows the order does not matter of both device ids or the inner lists.
    * 
-   * EXAMPLES:
-   * ```cpp
    * Single display:
    *     [[DISPLAY_1]]
    * 2 extended displays:
@@ -113,7 +110,8 @@ namespace display_device {
    *     [[DISPLAY_1, DISPLAY_2]]
    * Mixed displays:
    *     [[EXTENDED_DISPLAY_1], [DUPLICATED_DISPLAY_1, DUPLICATED_DISPLAY_2], [EXTENDED_DISPLAY_2]]
-   * ```
+   * 
+   * @note On Windows the order does not matter of both device ids or the inner lists.
    */
   using active_topology_t = std::vector<std::vector<std::string>>;
 
@@ -125,7 +123,6 @@ namespace display_device {
    * EXAMPLES:
    * ```cpp
    * const auto devices { enum_available_devices() };
-   * BOOST_LOG(info) << to_string(devices);
    * ```
    */
   device_info_map_t
@@ -134,14 +131,14 @@ namespace display_device {
   /**
    * @brief Get display name associated with the device.
    * @param device_id A device to get display name for.
-   * @returns A display name for the device or an empty string if the device is inactive or not found.
+   * @returns A display name for the device, or an empty string if the device is inactive or not found.
    *          Empty string can also be returned if an error has occurred.
    * @see device_info_t
    * 
    * EXAMPLES:
    * ```cpp
-   * const std::string device_id { "MY_DEVICE_ID" };
-   * BOOST_LOG(info) << get_display_name(device_id);
+   * const std::string device_name { "MY_DEVICE_ID" };
+   * const std::string display_name = get_display_name(device_id);
    * ```
    */
   std::string
@@ -156,7 +153,7 @@ namespace display_device {
    * EXAMPLES:
    * ```cpp
    * const std::unordered_set<std::string> device_ids { "DEVICE_ID_1", "DEVICE_ID_2" };
-   * BOOST_LOG(info) << to_string(get_current_display_modes(device_ids));
+   * const auto current_modes = get_current_display_modes(device_ids);
    * ```
    */
   device_display_mode_map_t
@@ -173,9 +170,8 @@ namespace display_device {
    * ```cpp
    * const std::string display_a { "MY_ID_1" };
    * const std::string display_b { "MY_ID_2" };
-   * const auto result { set_display_modes({ { display_a, { { 1920, 1080 }, { 60, 1 } } },
-   *                                         { display_b, { { 1920, 1080 }, { 120, 1 } } } }) };
-   * BOOST_LOG(info) << "set_display_modes result: " << result;
+   * const auto success = set_display_modes({ { display_a, { { 1920, 1080 }, { 60, 1 } } },
+   *                                          { display_b, { { 1920, 1080 }, { 120, 1 } } } });
    * ```
    */
   bool
@@ -190,7 +186,7 @@ namespace display_device {
    * EXAMPLES:
    * ```cpp
    * const std::string device_id { "MY_DEVICE_ID" };
-   * BOOST_LOG(info) << device_id << " is primary device: " << is_primary_device(device_id);
+   * const bool is_primary = is_primary_device(device_id);
    * ```
    */
   bool
@@ -205,7 +201,7 @@ namespace display_device {
    * EXAMPLES:
    * ```cpp
    * const std::string device_id { "MY_DEVICE_ID" };
-   * BOOST_LOG(info) << device_id << " was set as a primary device: " << set_as_primary_device(device_id);
+   * const bool success = set_as_primary_device(device_id);
    * ``
    */
   bool
@@ -220,7 +216,7 @@ namespace display_device {
    * EXAMPLES:
    * ```cpp
    * const std::unordered_set<std::string> device_ids { "DEVICE_ID_1", "DEVICE_ID_2" };
-   * BOOST_LOG(info) << to_string(get_current_hdr_states(device_ids));
+   * const auto current_hdr_states = get_current_hdr_states(device_ids);
    * ```
    */
   hdr_state_map_t
@@ -237,9 +233,8 @@ namespace display_device {
    * ```cpp
    * const std::string display_a { "MY_ID_1" };
    * const std::string display_b { "MY_ID_2" };
-   * const auto result { set_hdr_states({ { display_a, hdr_state_e::enabled },
-   *                                      { display_b, hdr_state_e::disabled }) };
-   * BOOST_LOG(info) << "set_hdr_states result: " << result;
+   * const auto success = set_hdr_states({ { display_a, hdr_state_e::enabled },
+   *                                       { display_b, hdr_state_e::disabled } });
    * ```
    */
   bool
@@ -253,7 +248,6 @@ namespace display_device {
    * EXAMPLES:
    * ```cpp
    * const auto current_topology { get_current_topology() };
-   * BOOST_LOG(info) << to_string(current_topology);
    * ```
    */
   active_topology_t
@@ -272,14 +266,14 @@ namespace display_device {
    * ```cpp
    * auto current_topology { get_current_topology() };
    * // Modify the current_topology
-   * BOOST_LOG(info) << "is valid: " << is_topology_valid(current_topology);
+   * const bool is_valid = is_topology_valid(current_topology);
    * ```
    */
   bool
   is_topology_valid(const active_topology_t &topology);
 
   /**
-   * @brief Checks if the topologies are close enough to be considered the same by the OS.
+   * @brief Check if the topologies are close enough to be considered the same by the OS.
    * @param a First topology to compare.
    * @param b Second topology to compare.
    * @returns True if topologies are close enough, false otherwise.
@@ -289,7 +283,7 @@ namespace display_device {
    * auto current_topology { get_current_topology() };
    * auto new_topology { current_topology };
    * // Modify the new_topology
-   * BOOST_LOG(info) << "is the same: " << is_topology_the_same(current_topology, new_topology);
+   * const bool is_the_same = is_topology_the_same(current_topology, new_topology);
    * ```
    */
   bool
@@ -304,7 +298,7 @@ namespace display_device {
    * ```cpp
    * auto current_topology { get_current_topology() };
    * // Modify the current_topology
-   * BOOST_LOG(info) << "set new topology: " << set_topology(current_topology);
+   * const bool success = set_topology(current_topology);
    * ```
    */
   bool
