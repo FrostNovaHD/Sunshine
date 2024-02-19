@@ -9,17 +9,40 @@
 
 namespace display_device {
 
-  //! A platform specific class that applies and reverts the changes to the display devices.
+  /**
+   * @brief A platform specific class that can apply configuration to the display device and later revert it.
+   *
+   * Main goals of this class:
+   *   - Apply the configuration to the display device.
+   *   - Revert the applied configuration to get back to the initial state.
+   *   - Save and load the previous state to/from a file.
+   */
   class settings_t {
   public:
-    // Platform specific data
+    /**
+     * @brief Platform specific persistent data.
+     */
     struct persistent_data_t;
 
-    //! Platform specific audio object to in case we need to manipulate audio session.
+    /**
+     * @brief Platform specific non-persistent audio data in case we need to manipulate
+     *        audio session and keep some temporary data around.
+     */
     struct audio_data_t;
 
-    //! Convenience structure for informing the user about the failure type.
+    /**
+     * @brief The result value of the apply_config with additional metadata.
+     * @note Metadata is used when generating an XML status report to the client.
+     * @see apply_config
+     */
     struct apply_result_t {
+      /**
+       * @brief Possible result values/reasons from apply_config.
+       * @note There is no deeper meaning behind the values. They simply represent
+       *       the stage where the method has failed to give some hints to the user.
+       * @note The value of 700 has no special meaning and is just arbitrary.
+       * @see apply_config
+       */
       enum class result_e : int {
         success = 0,
         config_parse_fail = 700,
@@ -31,43 +54,176 @@ namespace display_device {
         revert_fail
       };
 
+      /**
+       * @brief Convert the result to boolean equivalent.
+       * @returns True if result means success, false otherwise.
+       *
+       * EXAMPLES:
+       * ```cpp
+       * const apply_result_t result { result_e::topology_fail };
+       * if (result) {
+       *   // Handle good result
+       * }
+       * else {
+       *   // Handle bad result
+       * }
+       * ```
+       */
+      explicit
       operator bool() const;
 
-      int
+      /**
+       * @brief Convert the result to the underlying integer value.
+       * @returns Integer value of the result.
+       *
+       * EXAMPLES:
+       * ```cpp
+       * const apply_result_t result { result_e::topology_fail };
+       * if (!result) {
+       *   const int error_code = result.get_error_code();
+       * }
+       * ```
+       */
+      [[nodiscard]] int
       get_error_code() const;
 
-      std::string
+      /**
+       * @brief Get a string message with better explanation for the result.
+       * @returns String message for the result.
+       *
+       * EXAMPLES:
+       * ```cpp
+       * const apply_result_t result { result_e::topology_fail };
+       * if (!result) {
+       *   const int error_message = result.get_error_message();
+       * }
+       * ```
+       */
+      [[nodiscard]] std::string
       get_error_message() const;
 
-      result_e result;
+      result_e result; /**< The result value. */
     };
 
+    /**
+     * @brief A platform specific default constructor.
+     * @note Needed due to forwarding declarations used by the class.
+     */
     explicit settings_t();
+
+    /**
+     * @brief A platform specific destructor.
+     * @note Needed due to forwarding declarations used by the class.
+     */
     virtual ~settings_t();
 
-    //! Sets the filepath to save persistent data to.
+    /**
+     * @brief Set the file path for persistent data.
+     *
+     * EXAMPLES:
+     * ```cpp
+     * settings_t settings;
+     * settings.set_filepath("/foo/bar.json");
+     * ```
+     */
     void
     set_filepath(std::filesystem::path filepath);
 
-    //! Parses the provided configurations and tries to apply them.
+    /**
+     * @brief Apply configuration based on the user configuration and the session information.
+     * @param config User's video related configuration.
+     * @param session Session information.
+     * @returns The apply result value.
+     * @see apply_result_t
+     *
+     * EXAMPLES:
+     * ```cpp
+     * const std::shared_ptr< rtsp_stream::launch_session_t> launch_session; // Assuming ptr is properly initialized
+     * const config::video_t &video_config { config::video };
+     *
+     * settings_t settings;
+     * const auto result = settings.apply_config(video_config, *launch_session);
+     * ```
+     */
     apply_result_t
     apply_config(const config::video_t &config, const rtsp_stream::launch_session_t &session);
 
-    //! Reverts the applied settings either from cache or persistent file.
+    /**
+     * @brief Revert the apply configuration and restore the previous settings.
+     * @returns True if settings were reverted or there was nothing to revert, false otherwise.
+     *
+     * EXAMPLES:
+     * ```cpp
+     * const std::shared_ptr< rtsp_stream::launch_session_t> launch_session; // Assuming ptr is properly initialized
+     * const config::video_t &video_config { config::video };
+     *
+     * settings_t settings;
+     * const auto result = settings.apply_config(video_config, *launch_session);
+     * if (result) {
+     *   // Wait for some time
+     *   settings.revert_settings();
+     * }
+     * ```
+     */
     bool
     revert_settings();
 
+    /**
+     * @brief Reset the persistence and currently held initial display state.
+     *
+     * This is normally used to get out of the "broken" state the algorithm wants
+     * to restore the initial display state and refuses start the stream in most cases.
+     *
+     * This could happen if the display is no longer available or the hardware was changed
+     * and the device ids no longer match.
+     *
+     * The user then accepts that Sunshine is not able to restore the state and "agrees" to
+     * do it manually.
+     *
+     * EXAMPLES:
+     * ```cpp
+     * const std::shared_ptr< rtsp_stream::launch_session_t> launch_session; // Assuming ptr is properly initialized
+     * const config::video_t &video_config { config::video };
+     *
+     * settings_t settings;
+     * const auto result = settings.apply_config(video_config, *launch_session);
+     * if (result) {
+     *   // Wait for some time
+     *   if (settings.revert_settings()) {
+     *     // Wait for user input
+     *     const bool user_wants_reset { true };
+     *     if (user_wants_reset) {
+     *       settings.reset_persistence();
+     *     }
+     *   }
+     * }
+     * ```
+     */
     void
     reset_persistence();
 
   private:
-    //! Tries to apply the provided configuration.
+    /**
+     * @brief Apply the parsed configuration.
+     * @param config A parsed and validated configuration.
+     * @returns The apply result value.
+     * @see apply_result_t
+     * @see parsed_config_t
+     *
+     * EXAMPLES:
+     * ```cpp
+     * const parsed_config_t config;
+     *
+     * settings_t settings;
+     * const auto result = settings.apply_config(config);
+     * ```
+     */
     apply_result_t
     apply_config(const parsed_config_t &config);
 
-    std::unique_ptr<persistent_data_t> persistent_data;
-    std::unique_ptr<audio_data_t> audio_data;
-    std::filesystem::path filepath;
+    std::unique_ptr<persistent_data_t> persistent_data; /**< Platform specific persistent data. */
+    std::unique_ptr<audio_data_t> audio_data; /**< Platform specific temporary audio data. */
+    std::filesystem::path filepath; /**< Filepath for persistent file. */
   };
 
 }  // namespace display_device

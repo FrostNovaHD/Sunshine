@@ -25,11 +25,11 @@ namespace display_device {
       case result_e::primary_display_fail:
         return "Failed to change primary display";
       case result_e::modes_fail:
-        return "Failed to set new display modes";
+        return "Failed to set new display modes (resolution + refresh rate)";
       case result_e::hdr_states_fail:
         return "Failed to set new HDR states";
       case result_e::file_save_fail:
-        return "Failed to save the original settings file";
+        return "Failed to save the original settings to persistent file";
       case result_e::revert_fail:
         return "Failed to revert back to the original display settings";
       default:
