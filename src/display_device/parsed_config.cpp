@@ -12,6 +12,22 @@
 namespace display_device {
 
   namespace {
+    /**
+     * @brief Parse resolution option from the user configuration and the session information.
+     * @param config User's video related configuration.
+     * @param session Session information.
+     * @param parsed_config A reference to a config object that will be modified on success.
+     * @returns True on successful parsing, false otherwise.
+     *
+     * EXAMPLES:
+     * ```cpp
+     * const std::shared_ptr< rtsp_stream::launch_session_t> launch_session; // Assuming ptr is properly initialized
+     * const config::video_t &video_config { config::video };
+     *
+     * parsed_config_t parsed_config;
+     * const bool success = parse_resolution_option(video_config, *launch_session, parsed_config);
+     * ```
+     */
     bool
     parse_resolution_option(const config::video_t &config, const rtsp_stream::launch_session_t &session, parsed_config_t &parsed_config) {
       const auto resolution_option { static_cast<parsed_config_t::resolution_change_e>(config.resolution_change) };
@@ -75,6 +91,22 @@ namespace display_device {
       return true;
     }
 
+    /**
+     * @brief Parse refresh rate option from the user configuration and the session information.
+     * @param config User's video related configuration.
+     * @param session Session information.
+     * @param parsed_config A reference to a config object that will be modified on success.
+     * @returns True on successful parsing, false otherwise.
+     *
+     * EXAMPLES:
+     * ```cpp
+     * const std::shared_ptr< rtsp_stream::launch_session_t> launch_session; // Assuming ptr is properly initialized
+     * const config::video_t &video_config { config::video };
+     *
+     * parsed_config_t parsed_config;
+     * const bool success = parse_refresh_rate_option(video_config, *launch_session, parsed_config);
+     * ```
+     */
     bool
     parse_refresh_rate_option(const config::video_t &config, const rtsp_stream::launch_session_t &session, parsed_config_t &parsed_config) {
       const auto refresh_rate_option { static_cast<parsed_config_t::refresh_rate_change_e>(config.refresh_rate_change) };
@@ -91,10 +123,10 @@ namespace display_device {
         }
         case parsed_config_t::refresh_rate_change_e::manual: {
           const std::string trimmed_string { boost::algorithm::trim_copy(config.manual_refresh_rate) };
-          const boost::regex resolution_regex { R"(^(\d+)(?:\.(\d+))?$)" };  // std::regex hangs in CTOR for some reason when called in a thread...
+          const boost::regex refresh_rate_regex { R"(^(\d+)(?:\.(\d+))?$)" };  // std::regex hangs in CTOR for some reason when called in a thread...
 
           boost::smatch match;
-          if (boost::regex_match(trimmed_string, match, resolution_regex)) {
+          if (boost::regex_match(trimmed_string, match, refresh_rate_regex)) {
             try {
               if (match[2].matched) {
                 // We have a decimal point and will have to split it into numerator and denominator.
@@ -103,13 +135,21 @@ namespace display_device {
                 //     numerator = 59995
                 //     denominator = 1000
 
+                // We have essentially removing the decimal point here: 59.995 -> 59995
                 const std::string numerator_str { match[1].str() + match[2].str() };
                 const auto numerator { static_cast<unsigned int>(std::stol(numerator_str)) };
+
+                // Here we are counting decimal places and calculating denominator: 10^decimal_places
                 const auto denominator { static_cast<unsigned int>(std::pow(10, std::distance(match[2].first, match[2].second))) };
 
                 parsed_config.refresh_rate = refresh_rate_t { numerator, denominator };
               }
               else {
+                // We do not have a decimal point, just a valid number.
+                // For example:
+                //   60:
+                //     numerator = 60
+                //     denominator = 1
                 parsed_config.refresh_rate = refresh_rate_t { static_cast<unsigned int>(std::stol(match[1])), 1 };
               }
             }
@@ -143,6 +183,20 @@ namespace display_device {
       return true;
     }
 
+    /**
+     * @brief Parse HDR option from the user configuration and the session information.
+     * @param config User's video related configuration.
+     * @param session Session information.
+     * @returns Parsed HDR state value we need to switch to (true == ON, false == OFF).
+     *          Empty optional if no action is required.
+     *
+     * EXAMPLES:
+     * ```cpp
+     * const std::shared_ptr< rtsp_stream::launch_session_t> launch_session; // Assuming ptr is properly initialized
+     * const config::video_t &video_config { config::video };
+     * const auto hdr_option = parse_hdr_option(video_config, *launch_session);
+     * ```
+     */
     boost::optional<bool>
     parse_hdr_option(const config::video_t &config, const rtsp_stream::launch_session_t &session) {
       const auto hdr_prep_option { static_cast<parsed_config_t::hdr_prep_e>(config.hdr_prep) };
