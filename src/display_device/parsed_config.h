@@ -129,7 +129,7 @@ namespace display_device {
    *
    * EXAMPLES:
    * ```cpp
-   * const std::shared_ptr< rtsp_stream::launch_session_t> launch_session; // Assuming ptr is properly initialized
+   * const std::shared_ptr<rtsp_stream::launch_session_t> launch_session; // Assuming ptr is properly initialized
    * const config::video_t &video_config { config::video };
    * const auto parsed_config = make_parsed_config(video_config, *launch_session);
    * ```

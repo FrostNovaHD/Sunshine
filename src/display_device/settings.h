@@ -138,7 +138,7 @@ namespace display_device {
      *
      * EXAMPLES:
      * ```cpp
-     * const std::shared_ptr< rtsp_stream::launch_session_t> launch_session; // Assuming ptr is properly initialized
+     * const std::shared_ptr<rtsp_stream::launch_session_t> launch_session; // Assuming ptr is properly initialized
      * const config::video_t &video_config { config::video };
      *
      * settings_t settings;
@@ -149,12 +149,13 @@ namespace display_device {
     apply_config(const config::video_t &config, const rtsp_stream::launch_session_t &session);
 
     /**
-     * @brief Revert the apply configuration and restore the previous settings.
+     * @brief Revert the applied configuration and restore the previous settings.
+     * @note It automatically loads the settings from persistence file if cached settings do not exist.
      * @returns True if settings were reverted or there was nothing to revert, false otherwise.
      *
      * EXAMPLES:
      * ```cpp
-     * const std::shared_ptr< rtsp_stream::launch_session_t> launch_session; // Assuming ptr is properly initialized
+     * const std::shared_ptr<rtsp_stream::launch_session_t> launch_session; // Assuming ptr is properly initialized
      * const config::video_t &video_config { config::video };
      *
      * settings_t settings;
@@ -170,19 +171,11 @@ namespace display_device {
 
     /**
      * @brief Reset the persistence and currently held initial display state.
-     *
-     * This is normally used to get out of the "broken" state the algorithm wants
-     * to restore the initial display state and refuses start the stream in most cases.
-     *
-     * This could happen if the display is no longer available or the hardware was changed
-     * and the device ids no longer match.
-     *
-     * The user then accepts that Sunshine is not able to restore the state and "agrees" to
-     * do it manually.
+     * @see session_t::reset_persistence for more details.
      *
      * EXAMPLES:
      * ```cpp
-     * const std::shared_ptr< rtsp_stream::launch_session_t> launch_session; // Assuming ptr is properly initialized
+     * const std::shared_ptr<rtsp_stream::launch_session_t> launch_session; // Assuming ptr is properly initialized
      * const config::video_t &video_config { config::video };
      *
      * settings_t settings;

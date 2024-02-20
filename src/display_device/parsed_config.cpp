@@ -21,7 +21,7 @@ namespace display_device {
      *
      * EXAMPLES:
      * ```cpp
-     * const std::shared_ptr< rtsp_stream::launch_session_t> launch_session; // Assuming ptr is properly initialized
+     * const std::shared_ptr<rtsp_stream::launch_session_t> launch_session; // Assuming ptr is properly initialized
      * const config::video_t &video_config { config::video };
      *
      * parsed_config_t parsed_config;
@@ -100,7 +100,7 @@ namespace display_device {
      *
      * EXAMPLES:
      * ```cpp
-     * const std::shared_ptr< rtsp_stream::launch_session_t> launch_session; // Assuming ptr is properly initialized
+     * const std::shared_ptr<rtsp_stream::launch_session_t> launch_session; // Assuming ptr is properly initialized
      * const config::video_t &video_config { config::video };
      *
      * parsed_config_t parsed_config;
@@ -192,7 +192,7 @@ namespace display_device {
      *
      * EXAMPLES:
      * ```cpp
-     * const std::shared_ptr< rtsp_stream::launch_session_t> launch_session; // Assuming ptr is properly initialized
+     * const std::shared_ptr<rtsp_stream::launch_session_t> launch_session; // Assuming ptr is properly initialized
      * const config::video_t &video_config { config::video };
      * const auto hdr_option = parse_hdr_option(video_config, *launch_session);
      * ```
