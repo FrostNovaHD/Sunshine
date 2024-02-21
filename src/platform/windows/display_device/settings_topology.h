@@ -1,7 +1,7 @@
 #pragma once
 
 // local includes
-#include "settings_data.h"
+#include "src/display_device/settings.h"
 
 namespace display_device {
 
