@@ -274,8 +274,8 @@ namespace display_device {
 
   /**
    * @brief Check if the topologies are close enough to be considered the same by the OS.
-   * @param a First topology to compare.
-   * @param b Second topology to compare.
+   * @param topology_a First topology to compare.
+   * @param topology_b Second topology to compare.
    * @returns True if topologies are close enough, false otherwise.
    * 
    * EXAMPLES:
@@ -287,7 +287,7 @@ namespace display_device {
    * ```
    */
   bool
-  is_topology_the_same(const active_topology_t &a, const active_topology_t &b);
+  is_topology_the_same(const active_topology_t &topology_a, const active_topology_t &topology_b);
 
   /**
    * @brief Set the a new active topology for the OS.
