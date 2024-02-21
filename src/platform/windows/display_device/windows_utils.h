@@ -30,17 +30,17 @@ namespace display_device::w_utils {
   };
 
   /**
-   * @brief Stringify the error code from the "connecting and configuring display" (CCD) APIs.
+   * @brief Stringify the error code from Windows API.
    * @param error_code Error code to stringify.
    * @returns String containing the error code in a readable format + a system message describing the code.
    *
    * EXAMPLES:
    * ```cpp
-   * const std::string error_message = get_ccd_error_string(ERROR_NOT_SUPPORTED);
+   * const std::string error_message = get_error_string(ERROR_NOT_SUPPORTED);
    * ```
    */
   std::string
-  get_ccd_error_string(LONG error_code);
+  get_error_string(LONG error_code);
 
   /**
    * @brief Check if the display's source mode is primary - if the associated device is a primary display device.

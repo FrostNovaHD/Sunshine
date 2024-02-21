@@ -36,30 +36,11 @@ namespace display_device::w_utils {
 
       LONG result { DisplayConfigGetDeviceInfo(&target_name.header) };
       if (result != ERROR_SUCCESS) {
-        BOOST_LOG(error) << get_ccd_error_string(result) << " failed to get target device name!";
+        BOOST_LOG(error) << get_error_string(result) << " failed to get target device name!";
         return {};
       }
 
       return std::wstring { target_name.monitorDevicePath };
-    }
-
-    /**
-     * @brief Stringify the generic Windows error code.
-     * @param error_code Error code to stringify.
-     * @returns String containing the error code in a readable format + a system message describing the code.
-     *
-     * EXAMPLES:
-     * ```cpp
-     * const std::string error_message = get_generic_error_string(ERROR_INSUFFICIENT_BUFFER);
-     * ```
-     */
-    std::string
-    get_generic_error_string(DWORD error_code) {
-      std::stringstream error;
-      error << "[code: ";
-      error << error_code;
-      error << ", message: " << std::system_category().message(static_cast<int>(error_code)) << "]";
-      return error.str();
     }
 
     /**
@@ -75,7 +56,7 @@ namespace display_device::w_utils {
         return false;
       }
       else if (required_size_in_bytes <= 0) {
-        BOOST_LOG(error) << get_generic_error_string(GetLastError()) << " \"SetupDiGetDeviceInterfaceDetailW\" failed while getting size.";
+        BOOST_LOG(error) << get_error_string(static_cast<LONG>(GetLastError())) << " \"SetupDiGetDeviceInterfaceDetailW\" failed while getting size.";
         return false;
       }
 
@@ -87,7 +68,7 @@ namespace display_device::w_utils {
       detail_data->cbSize = sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA_W);
 
       if (!SetupDiGetDeviceInterfaceDetailW(dev_info_handle, &dev_interface_data, detail_data, required_size_in_bytes, nullptr, &dev_info_data)) {
-        BOOST_LOG(error) << get_generic_error_string(GetLastError()) << " \"SetupDiGetDeviceInterfaceDetailW\" failed.";
+        BOOST_LOG(error) << get_error_string(static_cast<LONG>(GetLastError())) << " \"SetupDiGetDeviceInterfaceDetailW\" failed.";
         return false;
       }
 
@@ -108,13 +89,13 @@ namespace display_device::w_utils {
         return false;
       }
       else if (required_size_in_characters <= 0) {
-        BOOST_LOG(error) << get_generic_error_string(GetLastError()) << " \"SetupDiGetDeviceInstanceIdW\" failed while getting size.";
+        BOOST_LOG(error) << get_error_string(static_cast<LONG>(GetLastError())) << " \"SetupDiGetDeviceInstanceIdW\" failed while getting size.";
         return false;
       }
 
       instance_id.resize(required_size_in_characters);
       if (!SetupDiGetDeviceInstanceIdW(dev_info_handle, &dev_info_data, instance_id.data(), instance_id.size(), nullptr)) {
-        BOOST_LOG(error) << get_generic_error_string(GetLastError()) << " \"SetupDiGetDeviceInstanceIdW\" failed.";
+        BOOST_LOG(error) << get_error_string(static_cast<LONG>(GetLastError())) << " \"SetupDiGetDeviceInstanceIdW\" failed.";
         return false;
       }
 
@@ -131,7 +112,7 @@ namespace display_device::w_utils {
       // We could just directly open the registry key as the path is known, but we can also use the this
       HKEY reg_key { SetupDiOpenDevRegKey(dev_info_handle, &dev_info_data, DICS_FLAG_GLOBAL, 0, DIREG_DEV, KEY_READ) };
       if (reg_key == INVALID_HANDLE_VALUE) {
-        BOOST_LOG(error) << get_generic_error_string(GetLastError()) << " \"SetupDiOpenDevRegKey\" failed.";
+        BOOST_LOG(error) << get_error_string(static_cast<LONG>(GetLastError())) << " \"SetupDiOpenDevRegKey\" failed.";
         return false;
       }
 
@@ -139,7 +120,7 @@ namespace display_device::w_utils {
         util::fail_guard([&reg_key]() {
           const auto status { RegCloseKey(reg_key) };
           if (status != ERROR_SUCCESS) {
-            BOOST_LOG(error) << get_generic_error_string(status) << " \"RegCloseKey\" failed.";
+            BOOST_LOG(error) << get_error_string(status) << " \"RegCloseKey\" failed.";
           }
         })
       };
@@ -147,7 +128,7 @@ namespace display_device::w_utils {
       DWORD required_size_in_bytes { 0 };
       auto status { RegQueryValueExW(reg_key, L"EDID", nullptr, nullptr, nullptr, &required_size_in_bytes) };
       if (status != ERROR_SUCCESS) {
-        BOOST_LOG(error) << get_generic_error_string(status) << " \"RegQueryValueExW\" failed when getting size.";
+        BOOST_LOG(error) << get_error_string(status) << " \"RegQueryValueExW\" failed when getting size.";
         return false;
       }
 
@@ -155,7 +136,7 @@ namespace display_device::w_utils {
 
       status = RegQueryValueExW(reg_key, L"EDID", nullptr, nullptr, edid.data(), &required_size_in_bytes);
       if (status != ERROR_SUCCESS) {
-        BOOST_LOG(error) << get_generic_error_string(status) << " \"RegQueryValueExW\" failed when getting size.";
+        BOOST_LOG(error) << get_error_string(status) << " \"RegQueryValueExW\" failed when getting size.";
         return false;
       }
 
@@ -165,7 +146,7 @@ namespace display_device::w_utils {
   }  // namespace
 
   std::string
-  get_ccd_error_string(LONG error_code) {
+  get_error_string(LONG error_code) {
     std::stringstream error;
     error << "[code: ";
     switch (error_code) {
@@ -191,7 +172,7 @@ namespace display_device::w_utils {
         error << error_code;
         break;
     }
-    error << ", message: " << std::system_category().message(static_cast<int>(HRESULT_FROM_WIN32(error_code))) << "]";
+    error << ", message: " << std::system_category().message(static_cast<int>(error_code)) << "]";
     return error.str();
   }
 
@@ -236,7 +217,7 @@ namespace display_device::w_utils {
       const auto dev_info_handle_cleanup {
         util::fail_guard([&dev_info_handle]() {
           if (!SetupDiDestroyDeviceInfoList(dev_info_handle)) {
-            BOOST_LOG(error) << get_generic_error_string(GetLastError()) << " \"SetupDiDestroyDeviceInfoList\" failed.";
+            BOOST_LOG(error) << get_error_string(static_cast<LONG>(GetLastError())) << " \"SetupDiDestroyDeviceInfoList\" failed.";
           }
         })
       };
@@ -250,7 +231,7 @@ namespace display_device::w_utils {
             break;
           }
 
-          BOOST_LOG(warning) << get_generic_error_string(error_code) << " \"SetupDiEnumDeviceInterfaces\" failed.";
+          BOOST_LOG(warning) << get_error_string(static_cast<LONG>(error_code)) << " \"SetupDiEnumDeviceInterfaces\" failed.";
           continue;
         }
 
@@ -347,7 +328,7 @@ namespace display_device::w_utils {
 
     LONG result { DisplayConfigGetDeviceInfo(&target_name.header) };
     if (result != ERROR_SUCCESS) {
-      BOOST_LOG(error) << get_ccd_error_string(result) << " failed to get target device name!";
+      BOOST_LOG(error) << get_error_string(result) << " failed to get target device name!";
       return {};
     }
 
@@ -364,7 +345,7 @@ namespace display_device::w_utils {
 
     LONG result { DisplayConfigGetDeviceInfo(&source_name.header) };
     if (result != ERROR_SUCCESS) {
-      BOOST_LOG(error) << get_ccd_error_string(result) << " failed to get display name! ";
+      BOOST_LOG(error) << get_error_string(result) << " failed to get display name! ";
       return {};
     }
 
@@ -386,7 +367,7 @@ namespace display_device::w_utils {
 
     LONG result { DisplayConfigGetDeviceInfo(&color_info.header) };
     if (result != ERROR_SUCCESS) {
-      BOOST_LOG(error) << get_ccd_error_string(result) << " failed to get advanced color info! ";
+      BOOST_LOG(error) << get_error_string(result) << " failed to get advanced color info! ";
       return hdr_state_e::unknown;
     }
 
@@ -405,7 +386,7 @@ namespace display_device::w_utils {
 
     LONG result { DisplayConfigSetDeviceInfo(&color_state.header) };
     if (result != ERROR_SUCCESS) {
-      BOOST_LOG(error) << get_ccd_error_string(result) << " failed to set advanced color info!";
+      BOOST_LOG(error) << get_error_string(result) << " failed to set advanced color info!";
       return false;
     }
 
@@ -573,7 +554,7 @@ namespace display_device::w_utils {
 
       result = GetDisplayConfigBufferSizes(flags, &path_count, &mode_count);
       if (result != ERROR_SUCCESS) {
-        BOOST_LOG(error) << get_ccd_error_string(result) << " failed to get display paths and modes!";
+        BOOST_LOG(error) << get_error_string(result) << " failed to get display paths and modes!";
         return boost::none;
       }
 
@@ -590,7 +571,7 @@ namespace display_device::w_utils {
     } while (result == ERROR_INSUFFICIENT_BUFFER);
 
     if (result != ERROR_SUCCESS) {
-      BOOST_LOG(error) << get_ccd_error_string(result) << " failed to query display paths and modes!";
+      BOOST_LOG(error) << get_error_string(result) << " failed to query display paths and modes!";
       return boost::none;
     }
 
