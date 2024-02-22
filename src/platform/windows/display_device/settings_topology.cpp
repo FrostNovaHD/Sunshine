@@ -131,7 +131,7 @@ namespace display_device {
               // Device is currently active in the active topology group
 
               if (duplicated_devices.size() > 1 || topology.size() > 1) {
-                // We have more than 1 device in the group or we have more than 1 topology groups.
+                // We have more than 1 device in the group, or we have more than 1 topology groups.
                 // We need to disable all other devices
                 final_topology = active_topology_t { { duplicated_devices.front() } };
               }
@@ -231,10 +231,10 @@ namespace display_device {
     // When dealing with the "requested device" here and in other functions we need to keep
     // in mind that it could belong to a duplicated display and thus all of them
     // need to be taken into account, which complicates everything...
-    auto duplicated_devices { get_duplicate_devices(requested_device_id, *current_topology) };
-    const auto final_topology { determine_final_topology(config.device_prep, primary_device_requested, duplicated_devices, *current_topology) };
+    auto duplicated_devices { get_duplicate_devices(requested_device_id, current_topology) };
+    const auto final_topology { determine_final_topology(config.device_prep, primary_device_requested, duplicated_devices, current_topology) };
 
-    if (!is_topology_the_same(*current_topology, final_topology)) {
+    if (!is_topology_the_same(current_topology, final_topology)) {
       BOOST_LOG(debug) << "changing display topology to: " << to_string(final_topology);
       if (!set_topology(final_topology)) {
         // Error already logged.
@@ -254,11 +254,11 @@ namespace display_device {
 
     return handled_topology_result_t {
       topology_pair_t {
-        *current_topology,
+        current_topology,
         final_topology },
       topology_metadata_t {
         final_topology,
-        get_newly_enabled_devices_from_topology(*current_topology, final_topology),
+        get_newly_enabled_devices_from_topology(current_topology, final_topology),
         primary_device_requested,
         duplicated_devices }
     };

@@ -51,7 +51,7 @@ namespace display_device {
         }
         case parsed_config_t::resolution_change_e::manual: {
           const std::string trimmed_string { boost::algorithm::trim_copy(config.manual_resolution) };
-          const boost::regex resolution_regex { R"(^(\d+)x(\d+)$)" };  // std::regex hangs in CTOR for some reason when called in a thread...
+          const boost::regex resolution_regex { R"(^(\d+)x(\d+)$)" };  // std::regex hangs in CTOR for some reason when called in a thread. Problem with MSYS2 packages (UCRT64), maybe?
 
           boost::smatch match;
           if (boost::regex_match(trimmed_string, match, resolution_regex)) {
@@ -123,7 +123,7 @@ namespace display_device {
         }
         case parsed_config_t::refresh_rate_change_e::manual: {
           const std::string trimmed_string { boost::algorithm::trim_copy(config.manual_refresh_rate) };
-          const boost::regex refresh_rate_regex { R"(^(\d+)(?:\.(\d+))?$)" };  // std::regex hangs in CTOR for some reason when called in a thread...
+          const boost::regex refresh_rate_regex { R"(^(\d+)(?:\.(\d+))?$)" };  // std::regex hangs in CTOR for some reason when called in a thread. Problem with MSYS2 packages (UCRT64), maybe?
 
           boost::smatch match;
           if (boost::regex_match(trimmed_string, match, refresh_rate_regex)) {
