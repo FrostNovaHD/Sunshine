@@ -6,27 +6,60 @@ namespace display_device {
 
   namespace {
 
+    /**
+     * @bried Check if the refresh rates are almost equal.
+     * @param r1 First refresh rate.
+     * @param r2 Second refresh rate.
+     * @return True if refresh rates are almost equal, false otherwise.
+     *
+     * EXAMPLES:
+     * ```cpp
+     * const bool almost_equal = fuzzy_compare_refresh_rates(refresh_rate_t { 60, 1 }, refresh_rate_t { 5985, 100 });
+     * const bool not_equal = fuzzy_compare_refresh_rates(refresh_rate_t { 60, 1 }, refresh_rate_t { 5585, 100 });
+     * ```
+     */
     bool
-    fuzzy_compare_refresh_rates(const refresh_rate_t &r1, const refresh_rate_t &r2, const float max_diff = 1.f) {
+    fuzzy_compare_refresh_rates(const refresh_rate_t &r1, const refresh_rate_t &r2) {
       if (r1.denominator > 0 && r2.denominator > 0) {
-        const float r1_f { static_cast<float>(r1.numerator) / r1.denominator };
-        const float r2_f { static_cast<float>(r2.numerator) / r2.denominator };
-        return (std::abs(r1_f - r2_f) <= max_diff);
+        const float r1_f { static_cast<float>(r1.numerator) / static_cast<float>(r1.denominator) };
+        const float r2_f { static_cast<float>(r2.numerator) / static_cast<float>(r2.denominator) };
+        return (std::abs(r1_f - r2_f) <= 1.f);
       }
 
       return false;
     }
 
+    /**
+     * @bried Check if the display modes are almost equal.
+     * @param mode_a First mode.
+     * @param mode_b Second mode.
+     * @return True if display modes are almost equal, false otherwise.
+     *
+     * EXAMPLES:
+     * ```cpp
+     * const bool almost_equal = fuzzy_compare_refresh_rates(display_mode_t { { 1920, 1080 }, { 60, 1 } },
+     *                                                       display_mode_t { { 1920, 1080 }, { 5985, 100 } });
+     * const bool not_equal = fuzzy_compare_refresh_rates(display_mode_t { { 1920, 1080 }, { 60, 1 } },
+     *                                                    display_mode_t { { 1920, 1080 }, { 5585, 100 } });
+     * ```
+     */
     bool
-    fuzzy_compare_modes(const display_mode_t &a, const display_mode_t &b) {
-      return a.resolution.width == b.resolution.width &&
-             a.resolution.height == b.resolution.height &&
-             fuzzy_compare_refresh_rates(a.refresh_rate, b.refresh_rate);
+    fuzzy_compare_modes(const display_mode_t &mode_a, const display_mode_t &mode_b) {
+      return mode_a.resolution.width == mode_b.resolution.width &&
+             mode_a.resolution.height == mode_b.resolution.height &&
+             fuzzy_compare_refresh_rates(mode_a.refresh_rate, mode_b.refresh_rate);
     }
 
-    /*
-     * Get all the devices that are duplicated ones. See comment where it is used as to
-     * why we need this.
+    /**
+     * @brief Get all the missing duplicate device ids for the provided device ids.
+     * @param device_ids Device ids to find the missing duplicate ids for.
+     * @returns A list of device ids containing the provided device ids and all unspecified ids
+     *          for duplicated displays.
+     *
+     * EXAMPLES:
+     * ```cpp
+     * const auto device_ids_with_duplicates = get_all_duplicated_devices({ "MY_ID1" });
+     * ```
      */
     std::unordered_set<std::string>
     get_all_duplicated_devices(const std::unordered_set<std::string> &device_ids) {
@@ -36,8 +69,6 @@ namespace display_device {
         return {};
       }
 
-      // We start by iterating over the provided device id (or paths) and try to get a source mode
-      // which contains the necessary info
       std::unordered_set<std::string> all_device_ids;
       for (const auto &device_id : device_ids) {
         if (device_id.empty()) {
@@ -57,7 +88,7 @@ namespace display_device {
           return {};
         }
 
-        // We will now iterate over all of the active paths (provided path included) and check if
+        // We will now iterate over all the active paths (provided path included) and check if
         // any of them are duplicated.
         for (const auto &path : display_data->paths) {
           const auto device_info { w_utils::get_device_info_for_valid_path(path, w_utils::ACTIVE_ONLY_DEVICES) };
@@ -76,7 +107,7 @@ namespace display_device {
             return {};
           }
 
-          if (!w_utils::are_duplicated_modes(*provided_path_source_mode, *source_mode)) {
+          if (!w_utils::are_modes_duplicated(*provided_path_source_mode, *source_mode)) {
             continue;
           }
 
@@ -87,6 +118,9 @@ namespace display_device {
       return all_device_ids;
     }
 
+    /**
+     * @see set_display_modes for a description as this was split off to reduce cognitive complexity.
+     */
     bool
     do_set_modes(const device_display_mode_map_t &modes, bool allow_changes) {
       auto display_data { w_utils::query_display_config(w_utils::ACTIVE_ONLY_DEVICES) };
@@ -126,7 +160,7 @@ namespace display_device {
         }
 
         if (new_changes) {
-          // Clear the target index so that Windows has to select a new target mode.
+          // Clear the target index so that Windows has to select/modify the target to best match the requirements.
           w_utils::set_target_index(*path, boost::none);
           w_utils::set_desktop_index(*path, boost::none);  // Part of struct containing target index and so it needs to be cleared
         }
@@ -149,7 +183,7 @@ namespace display_device {
 
       const LONG result { SetDisplayConfig(display_data->paths.size(), display_data->paths.data(), display_data->modes.size(), display_data->modes.data(), flags) };
       if (result != ERROR_SUCCESS) {
-        BOOST_LOG(error) << w_utils::get_ccd_error_string(result) << " failed to set display mode!";
+        BOOST_LOG(error) << w_utils::get_error_string(result) << " failed to set display mode!";
         return false;
       }
 
@@ -227,9 +261,9 @@ namespace display_device {
     // Without SDC_VIRTUAL_MODE_AWARE, devices would share the same source mode entry, but now
     // they have separate entries that are more or less identical.
     //
-    // To avoid surprising end-user with unexpected source mode change, we validate the input
-    // instead of changing it automatically. This also resolve the problem of having to choose
-    // refresh rate for duplicate display - leave it to the end-user of this function...
+    // To avoid surprising end-user with unexpected source mode change, we validate that all duplicate
+    // devices were provided instead of guessing modes automatically. This also resolve the problem of
+    // having to choose refresh rate for duplicate display - leave it to the end-user of this function...
     const auto all_device_ids { get_all_duplicated_devices(device_ids) };
     if (all_device_ids.empty()) {
       BOOST_LOG(error) << "failed to get all duplicated devices!";
@@ -257,7 +291,7 @@ namespace display_device {
       for (const auto &[device_id, requested_mode] : modes) {
         auto mode_it { current_modes.find(device_id) };
         if (mode_it == std::end(current_modes)) {
-          // I mean this race condition of disconnecting display device is technically possible...
+          // This race condition of disconnecting display device is technically possible...
           return false;
         }
 
@@ -276,19 +310,15 @@ namespace display_device {
       }
 
       // We have a problem when using SetDisplayConfig with SDC_ALLOW_CHANGES
-      // (which we should use as otherwise we need to set EVERYTHING correctly)
       // where it decides to use our new mode merely as a suggestion.
       //
       // This is good, since we don't have to be very precise with refresh rate,
       // but also bad since it can just ignore our specified mode.
       //
-      // However, it is possible that the user has created a custom display modes
+      // However, it is possible that the user has created a custom display mode
       // which is not exposed to the via Windows settings app. To allow this
       // resolution to be selected, we actually need to omit SDC_ALLOW_CHANGES
       // flag.
-
-      // If the settings are completely bonkers, this could fail with the following message:
-      //     [code: 1610, message: The configuration data for this product is corrupt. Contact your support personnel] failed to set display mode!
       BOOST_LOG(info) << "failed to change display modes using Windows recommended modes, trying to set modes more strictly!";
       if (do_set_modes(modes, !allow_changes)) {
         current_modes = get_current_display_modes(device_ids);

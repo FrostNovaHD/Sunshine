@@ -7,6 +7,9 @@ namespace display_device {
 
   namespace {
 
+    /**
+     * @see set_hdr_states for a description as this was split off to reduce cognitive complexity.
+     */
     bool
     do_set_states(const hdr_state_map_t &states) {
       const auto display_data { w_utils::query_display_config(w_utils::ACTIVE_ONLY_DEVICES) };

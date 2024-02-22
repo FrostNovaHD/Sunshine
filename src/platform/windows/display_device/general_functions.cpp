@@ -29,7 +29,7 @@ namespace display_device {
 
     const auto display_name { w_utils::get_display_name(*path) };
     if (display_name.empty()) {
-      BOOST_LOG(debug) << "device " << device_id << " has no display name assigned.";
+      BOOST_LOG(error) << "device " << device_id << " has no display name assigned.";
     }
 
     return display_name;
@@ -100,18 +100,13 @@ namespace display_device {
     }
 
     // Without verifying if the paths are valid or not (SetDisplayConfig will verify for us),
-    // shift, their source mode origin points accordingly, so that the provided
-    // device moves to (0, 0) position
+    // shift their source mode origin points accordingly, so that the provided
+    // device moves to (0, 0) position and others to their new positions.
     std::unordered_set<UINT32> modified_modes;
     for (auto &path : display_data->paths) {
       const auto current_id { w_utils::get_device_id(path) };
       const auto source_index { w_utils::get_source_index(path, display_data->modes) };
       auto source_mode { w_utils::get_source_mode(source_index, display_data->modes) };
-
-      if (!source_mode) {
-        BOOST_LOG(error) << "active device does not have a source or target mode: " << current_id << "!";
-        return false;
-      }
 
       if (!source_index || !source_mode) {
         BOOST_LOG(error) << "active device does not have a source mode: " << current_id << "!";
@@ -133,7 +128,7 @@ namespace display_device {
     const UINT32 flags { SDC_APPLY | SDC_USE_SUPPLIED_DISPLAY_CONFIG | SDC_SAVE_TO_DATABASE | SDC_VIRTUAL_MODE_AWARE };
     const LONG result { SetDisplayConfig(display_data->paths.size(), display_data->paths.data(), display_data->modes.size(), display_data->modes.data(), flags) };
     if (result != ERROR_SUCCESS) {
-      BOOST_LOG(error) << w_utils::get_ccd_error_string(result) << " failed to set primary mode for " << device_id << "!";
+      BOOST_LOG(error) << w_utils::get_error_string(result) << " failed to set primary mode for " << device_id << "!";
       return false;
     }
 
