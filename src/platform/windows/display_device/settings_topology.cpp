@@ -204,12 +204,22 @@ namespace display_device {
       // Here we are pretending to be in an initial topology and want to perform reevaluation in case the
       // user has changed the settings while the stream was paused. For the proper "evaluation" order,
       // see logic outside this conditional.
-      const auto duplicated_devices { get_duplicate_devices(requested_device_id, previously_configured_topology->initial) };
-      const auto final_topology { determine_final_topology(config.device_prep, primary_device_requested, duplicated_devices, previously_configured_topology->initial) };
+      const auto prev_duplicated_devices { get_duplicate_devices(requested_device_id, previously_configured_topology->initial) };
+      const auto prev_final_topology { determine_final_topology(config.device_prep, primary_device_requested, prev_duplicated_devices, previously_configured_topology->initial) };
+
+      // There is also an edge case where we can have a different number of primary duplicated devices, which wasn't the case
+      // during the initial topology configuration. If the user requested to use the primary device,
+      // the prev_final_topology would not reflect that change in primary duplicated devices. Therefore, we also need
+      // to evaluate current topology (which would have the new state of primary devices) and arrive at the
+      // same final topology as the prev_final_topology.
+      const auto current_topology { get_current_topology() };
+      const auto duplicated_devices { get_duplicate_devices(requested_device_id, current_topology) };
+      const auto final_topology { determine_final_topology(config.device_prep, primary_device_requested, duplicated_devices, current_topology) };
 
       // If the topology we are switching to is the same as the final topology we had before, that means
       // user did not change anything, and we don't need to revert changes.
-      if (!is_topology_the_same(previously_configured_topology->modified, final_topology)) {
+      if (!is_topology_the_same(previously_configured_topology->modified, prev_final_topology) ||
+          !is_topology_the_same(previously_configured_topology->modified, final_topology)) {
         BOOST_LOG(warning) << "previous topology does not match the new one. Reverting previous changes!";
         if (!revert_settings()) {
           return boost::none;
@@ -221,7 +231,7 @@ namespace display_device {
     // need to evaluate the current topology and perform the switch if needed as the user might
     // have been playing around with active displays while the stream was paused.
 
-    auto current_topology { get_current_topology() };
+    const auto current_topology { get_current_topology() };
     if (!is_topology_valid(current_topology)) {
       BOOST_LOG(error) << "display topology is invalid!";
       return boost::none;
