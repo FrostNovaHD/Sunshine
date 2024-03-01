@@ -10,7 +10,7 @@ encoding. Software encoding is also available. You can connect to Sunshine from 
 devices. A web UI is provided to allow configuration, and client pairing, from your favorite web browser. Pair from
 the local server or any mobile device.
 
-System Requirements
+System Requirements 
 -------------------
 
 .. warning:: This table is a work in progress. Do not purchase hardware based on this.
