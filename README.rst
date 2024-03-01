@@ -1,5 +1,5 @@
 Overview
-========
+======== 
 LizardByte has the full documentation hosted on `Read the Docs <https://sunshinestream.readthedocs.io/>`__.
 
 About
