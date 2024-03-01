@@ -145,7 +145,7 @@ namespace platf::dxgi {
     release_frame();
 
     AcquireSRWLockExclusive(&frame_lock);
-    if (SleepConditionVariableSRW(&frame_present_cv, &frame_lock, timeout.count(), 0) == FALSE) {
+    if (timeout.count() > 0 && SleepConditionVariableSRW(&frame_present_cv, &frame_lock, timeout.count(), 0) == FALSE) {
       ReleaseSRWLockExclusive(&frame_lock);
       if (GetLastError() == ERROR_TIMEOUT)
         return capture_e::timeout;
@@ -157,6 +157,8 @@ namespace platf::dxgi {
       produced_frame = nullptr;
     }
     ReleaseSRWLockExclusive(&frame_lock);
+    if (consumed_frame == nullptr && timeout.count() == 0)
+      return capture_e::timeout;
 
     auto capture_access = consumed_frame.Surface().as<winrt::IDirect3DDxgiInterfaceAccess>();
     if (capture_access == nullptr)
