@@ -15,7 +15,7 @@ System Requirements
 
 .. warning:: This table is a work in progress. Do not purchase hardware based on this.
 
-**Minimum Requirements**
+**Minimum Requirements** 
 
 +------------+------------------------------------------------------------+
 | GPU        | AMD: VCE 1.0 or higher, see `obs-amd hardware support`_    |
