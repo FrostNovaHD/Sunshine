@@ -1509,14 +1509,15 @@ keybindings
 .. table::
    :widths: auto
 
-   =============== ===========
-   Value           Description
-   =============== ===========
-   transcoding     transcoding (slowest)
-   webcam          webcam (slow)
-   lowlatency      low latency (fast)
-   ultralowlatency ultra low latency (fastest)
-   =============== ===========
+   ======================= ===========
+   Value                   Description
+   ======================= ===========
+   transcoding             transcoding (slowest)
+   webcam                  webcam (slow)
+   lowlatency_high_quality low latency, high quality (fast)
+   lowlatency              low latency (faster)
+   ultralowlatency         ultra low latency (fastest)
+   ======================= ===========
 
 **Default**
    ``ultralowlatency``
