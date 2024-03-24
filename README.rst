@@ -9,7 +9,7 @@ Offering low latency, cloud gaming server capabilities with support for AMD, Int
 encoding. Software encoding is also available. You can connect to Sunshine from any Moonlight client on a variety of
 devices. A web UI is provided to allow configuration, and client pairing, from your favorite web browser. Pair from
 the local server or any mobile device.
-
+ 
 System Requirements
 -------------------
 
