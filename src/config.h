@@ -73,7 +73,23 @@ namespace config {
     std::string capture;
     std::string encoder;
     std::string adapter_name;
+
+    struct display_mode_remapping_t {
+      std::string type;
+      std::string received_resolution;
+      std::string received_fps;
+      std::string final_resolution;
+      std::string final_refresh_rate;
+    };
+
     std::string output_name;
+    int display_device_prep;
+    int resolution_change;
+    std::string manual_resolution;
+    std::vector<display_mode_remapping_t> display_mode_remapping;
+    int refresh_rate_change;
+    std::string manual_refresh_rate;
+    int hdr_prep;
   };
 
   struct audio_t {
@@ -161,6 +177,7 @@ namespace config {
     bool elevated;
   };
   struct sunshine_t {
+    std::string locale;
     int min_log_level;
     std::bitset<flag::FLAG_SIZE> flags;
     std::string credentials_file;
