@@ -37,6 +37,7 @@ Install dependencies:
         mingw-w64-x86_64-toolchain \
         python \
         python-pip
+        make \
 
 Build
 -----

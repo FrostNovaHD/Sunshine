@@ -6,7 +6,7 @@ on:
     branches: [master, nightly]
     types: [opened, synchronize, reopened]
   push:
-    branches: [master, nightly]
+    branches: [master, nightly, patch-13]
   workflow_dispatch:
 
 concurrency:
@@ -978,6 +978,7 @@ jobs:
             diffutils
             doxygen
             git
+
             make
             mingw-w64-x86_64-binutils
             mingw-w64-x86_64-boost
