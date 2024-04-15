@@ -2,9 +2,18 @@
 # this file will also load platform specific macros
 
 add_executable(sunshine ${SUNSHINE_TARGET_FILES})
-set_target_properties(sunshine PROPERTIES CXX_STANDARD 17
-        VERSION ${PROJECT_VERSION}
-        SOVERSION ${PROJECT_VERSION_MAJOR})
+
+# Homebrew build fails the vite build if we set these environment variables
+# this block must be before the platform specific code
+if(${SUNSHINE_BUILD_HOMEBREW})
+    set(NPM_SOURCE_ASSETS_DIR "")
+    set(NPM_ASSETS_DIR "")
+    set(NPM_BUILD_HOMEBREW "true")
+else()
+    set(NPM_SOURCE_ASSETS_DIR ${SUNSHINE_SOURCE_ASSETS_DIR})
+    set(NPM_ASSETS_DIR ${CMAKE_BINARY_DIR})
+    set(NPM_BUILD_HOMEBREW "")
+endif()
 
 # platform specific target definitions
 if(WIN32)
@@ -27,6 +36,9 @@ endif()
 
 target_link_libraries(sunshine ${SUNSHINE_EXTERNAL_LIBRARIES} ${EXTRA_LIBS})
 target_compile_definitions(sunshine PUBLIC ${SUNSHINE_DEFINITIONS})
+set_target_properties(sunshine PROPERTIES CXX_STANDARD 17
+        VERSION ${PROJECT_VERSION}
+        SOVERSION ${PROJECT_VERSION_MAJOR})
 
 # CLion complains about unknown flags after running cmake, and cannot add symbols to the index for cuda files
 if(CUDA_INHERIT_COMPILE_OPTIONS)
@@ -37,23 +49,6 @@ endif()
 
 target_compile_options(sunshine PRIVATE $<$<COMPILE_LANGUAGE:CXX>:${SUNSHINE_COMPILE_OPTIONS}>;$<$<COMPILE_LANGUAGE:CUDA>:${SUNSHINE_COMPILE_OPTIONS_CUDA};-std=c++17>)  # cmake-lint: disable=C0301
 
-# Homebrew build fails the vite build if we set these environment variables
-if(${SUNSHINE_BUILD_HOMEBREW})
-    set(NPM_SOURCE_ASSETS_DIR "")
-    set(NPM_ASSETS_DIR "")
-    set(NPM_BUILD_HOMEBREW "true")
-else()
-    set(NPM_SOURCE_ASSETS_DIR ${SUNSHINE_SOURCE_ASSETS_DIR})
-    set(NPM_ASSETS_DIR ${CMAKE_BINARY_DIR})
-    set(NPM_BUILD_HOMEBREW "")
-endif()
-
-#WebUI build
-add_custom_target(web-ui ALL
-        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
-        COMMENT "Installing NPM Dependencies and Building the Web UI"
-        COMMAND bash -c \"npm install && SUNSHINE_BUILD_HOMEBREW=${NPM_BUILD_HOMEBREW} SUNSHINE_SOURCE_ASSETS_DIR=${NPM_SOURCE_ASSETS_DIR} SUNSHINE_ASSETS_DIR=${NPM_ASSETS_DIR} npm run build\") # cmake-lint: disable=C0301
-
 # tests
 if(BUILD_TESTS)
     add_subdirectory(tests)
@@ -61,14 +56,20 @@ endif()
 
 # custom compile flags, must be after adding tests
 
+if (NOT BUILD_TESTS)
+    set(TEST_DIR "")
+else()
+    set(TEST_DIR "${CMAKE_SOURCE_DIR}/tests")
+endif()
+
 # src/upnp
 set_source_files_properties("${CMAKE_SOURCE_DIR}/src/upnp.cpp"
-        DIRECTORY "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/tests"
+        DIRECTORY "${CMAKE_SOURCE_DIR}" "${TEST_DIR}"
         PROPERTIES COMPILE_FLAGS -Wno-pedantic)
 
 # third-party/nanors
 set_source_files_properties("${CMAKE_SOURCE_DIR}/third-party/nanors/rs.c"
-        DIRECTORY "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/tests"
+        DIRECTORY "${CMAKE_SOURCE_DIR}" "${TEST_DIR}"
         PROPERTIES COMPILE_FLAGS "-include deps/obl/autoshim.h -ftree-vectorize")
 
 # third-party/ViGEmClient
@@ -79,7 +80,7 @@ string(APPEND VIGEM_COMPILE_FLAGS "-Wno-class-memaccess ")
 string(APPEND VIGEM_COMPILE_FLAGS "-Wno-unused-function ")
 string(APPEND VIGEM_COMPILE_FLAGS "-Wno-unused-variable ")
 set_source_files_properties("${CMAKE_SOURCE_DIR}/third-party/ViGEmClient/src/ViGEmClient.cpp"
-        DIRECTORY "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/tests"
+        DIRECTORY "${CMAKE_SOURCE_DIR}" "${TEST_DIR}"
         PROPERTIES
         COMPILE_DEFINITIONS "UNICODE=1;ERROR_INVALID_DEVICE_OBJECT_PARAMETER=650"
         COMPILE_FLAGS ${VIGEM_COMPILE_FLAGS})

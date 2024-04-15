@@ -37,7 +37,6 @@ apt-get install -y --no-install-recommends \
   git \
   graphviz \
   libayatana-appindicator3-dev \
-  libavdevice-dev \
   libboost-filesystem-dev=1.74.* \
   libboost-locale-dev=1.74.* \
   libboost-log-dev=1.74.* \

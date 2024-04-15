@@ -500,18 +500,20 @@ jobs:
         run: |
           ${{ steps.python.outputs.python-path }} -m pip install gcovr
           ${{ steps.python.outputs.python-path }} -m gcovr -r .. \
-            --exclude ../tests/ \
-            --exclude ../third-party/ \
+            --exclude '.*tests/.*' \
+            --exclude '.*tests/.*' \
             --xml-pretty \
             -o coverage.xml
 
       - name: Upload coverage
         # any except canceled or skipped
         if: always() && (steps.test_report.outcome == 'success')
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
         with:
+          fail_ci_if_error: true
           files: ./build/coverage.xml
           flags: ${{ runner.os }}
+          token: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Create/Update GitHub Release
         if: ${{ needs.setup_release.outputs.create_release == 'true' }}
@@ -562,10 +564,12 @@ jobs:
             echo "This is a PUSH event"
             clone_url=${{ github.event.repository.clone_url }}
             branch="${{ github.ref_name }}"
+            default_branch="${{ github.event.repository.default_branch }}"
           else
             echo "This is a PR event"
             clone_url=${{ github.event.pull_request.head.repo.clone_url }}
             branch="${{ github.event.pull_request.head.ref }}"
+            default_branch="${{ github.event.pull_request.head.repo.default_branch }}"
           fi
           echo "Branch: ${branch}"
           echo "Clone URL: ${clone_url}"
@@ -575,6 +579,7 @@ jobs:
           cmake \
             -DGITHUB_BRANCH="${branch}" \
             -DGITHUB_CLONE_URL="${clone_url}" \
+            -DGITHUB_DEFAULT_BRANCH="${default_branch}" \
             -DSUNSHINE_CONFIGURE_HOMEBREW=ON \
             -DSUNSHINE_CONFIGURE_ONLY=ON \
             ..
@@ -610,7 +615,7 @@ jobs:
           echo "publish=${PUBLISH}" >> $GITHUB_OUTPUT
 
       - name: Validate and Publish Homebrew Formula
-        uses: LizardByte/homebrew-release-action@v2024.314.134529
+        uses: LizardByte/homebrew-release-action@v2024.409.24405
         with:
           formula_file: ${{ github.workspace }}/homebrew/sunshine.rb
           git_email: ${{ secrets.GH_BOT_EMAIL }}
@@ -791,7 +796,6 @@ jobs:
           done
 
       - name: Run tests
-        if: always()
         id: test
         timeout-minutes: 10
         run: |
@@ -819,8 +823,8 @@ jobs:
           cd ${build_dir}
           ${{ steps.python.outputs.python-path }} -m pip install gcovr
           sudo ${{ steps.python.outputs.python-path }} -m gcovr -r ../${dir} \
-            --exclude ../${dir}/tests/ \
-            --exclude ../${dir}/third-party/ \
+            --exclude '.*${dir}/tests/.*' \
+            --exclude '.*${dir}/third-party/.*' \
             --gcov-object-directory $(pwd) \
             --verbose \
             --xml-pretty \
@@ -829,10 +833,12 @@ jobs:
       - name: Upload coverage
         # any except canceled or skipped
         if: always() && (steps.test_report.outcome == 'success')
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
         with:
+          fail_ci_if_error: false  # todo: re-enable this when action is fixed
           files: ./build/coverage.xml
           flags: ${{ runner.os }}-${{ matrix.os_version }}
+          token: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Create/Update GitHub Release
         if: ${{ needs.setup_release.outputs.create_release == 'true' && matrix.release }}
@@ -966,28 +972,30 @@ jobs:
       - name: Setup Dependencies Windows
         uses: msys2/setup-msys2@v2
         with:
-          msystem: ucrt64
           update: true
           install: >-
+            base-devel
+            diffutils
             doxygen
             git
-            mingw-w64-ucrt-x86_64-boost
-            mingw-w64-ucrt-x86_64-cmake
-            mingw-w64-ucrt-x86_64-cppwinrt
-            mingw-w64-ucrt-x86_64-curl
-            mingw-w64-ucrt-x86_64-graphviz
-            mingw-w64-ucrt-x86_64-miniupnpc
-            mingw-w64-ucrt-x86_64-nlohmann-json
-            mingw-w64-ucrt-x86_64-nodejs
-            mingw-w64-ucrt-x86_64-nsis
-            mingw-w64-ucrt-x86_64-onevpl
-            mingw-w64-ucrt-x86_64-openssl
-            mingw-w64-ucrt-x86_64-opus
-            mingw-w64-ucrt-x86_64-toolchain
+
+            make
+            mingw-w64-x86_64-binutils
+            mingw-w64-x86_64-boost
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-curl
+            mingw-w64-x86_64-graphviz
+            mingw-w64-x86_64-miniupnpc
+            mingw-w64-x86_64-nlohmann-json
+            mingw-w64-x86_64-nodejs
+            mingw-w64-x86_64-nsis
+            mingw-w64-x86_64-onevpl
+            mingw-w64-x86_64-openssl
+            mingw-w64-x86_64-opus
+            mingw-w64-x86_64-toolchain
             nasm
             wget
             yasm
-            make
 
       - name: Setup python
         # use this instead of msys2 python due to known issues using wheels, https://www.msys2.org/docs/python/
@@ -1056,18 +1064,20 @@ jobs:
         run: |
           ${{ steps.python-path.outputs.python-path }} -m pip install gcovr
           ${{ steps.python-path.outputs.python-path }} -m gcovr -r .. \
-            --exclude ../tests/ \
-            --exclude ../third-party/ \
+            --exclude '.*tests/.*' \
+            --exclude '.*tests/.*' \
             --xml-pretty \
             -o coverage.xml
 
       - name: Upload coverage
         # any except canceled or skipped
         if: always() && (steps.test_report.outcome == 'success')
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
         with:
+          fail_ci_if_error: true
           files: ./build/coverage.xml
           flags: ${{ runner.os }}
+          token: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Package Windows Debug Info
         working-directory: build
