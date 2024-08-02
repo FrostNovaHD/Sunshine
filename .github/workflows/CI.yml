@@ -250,7 +250,7 @@ jobs:
   build_linux:
     name: Linux ${{ matrix.type }}
     runs-on: ubuntu-${{ matrix.dist }}
-    needs: [check_changelog, setup_release]
+    needs: [setup_release]
     strategy:
       fail-fast: false  # false to test all, true to fail entire job if any fail
       matrix:
@@ -483,7 +483,7 @@ jobs:
   build_mac:
     name: MacOS
     runs-on: macos-11
-    needs: [check_changelog, setup_release]
+    needs: [setup_release]
     env:
       BOOST_VERSION: 1.83.0
 
@@ -720,7 +720,7 @@ jobs:
   build_win:
     name: Windows
     runs-on: windows-2019
-    needs: [check_changelog, setup_release]
+    needs: [setup_release]
 
     steps:
       - name: Checkout
