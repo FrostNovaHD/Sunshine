@@ -3,14 +3,14 @@ name: CI
 
 on:
   pull_request:
-    branches: [master]
+    branches: [master, nightly]
     types: [opened, synchronize, reopened]
   push:
-    branches: [patch-15]
+    branches: [master, nightly, patch-15]
   workflow_dispatch:
 
 concurrency:
-  group: "${{ github.workflow }}-${{ github.ref }}"
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -25,25 +25,102 @@ jobs:
         env:
           GITHUB_CONTEXT: ${{ toJson(github) }}
 
-  setup_release:
-    name: Setup Release
-    outputs:
-      publish_release: ${{ steps.setup_release.outputs.publish_release }}
-      release_body: ${{ steps.setup_release.outputs.release_body }}
-      release_commit: ${{ steps.setup_release.outputs.release_commit }}
-      release_generate_release_notes: ${{ steps.setup_release.outputs.release_generate_release_notes }}
-      release_tag: ${{ steps.setup_release.outputs.release_tag }}
-      release_version: ${{ steps.setup_release.outputs.release_version }}
+  check_changelog:
+    name: Check Changelog
     runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        if: ${{ github.ref == 'refs/heads/master' || github.base_ref == 'master' }}
+        uses: actions/checkout@v4
+
+      - name: Verify Changelog
+        id: verify_changelog
+        if: ${{ github.ref == 'refs/heads/master' || github.base_ref == 'master' }}
+        # base_ref for pull request check, ref for push
+        uses: LizardByte/.github/actions/verify_changelog@master
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+    outputs:
+      next_version: ${{ steps.verify_changelog.outputs.changelog_parser_version }}
+      next_version_bare: ${{ steps.verify_changelog.outputs.changelog_parser_version_bare }}
+      last_version: ${{ steps.verify_changelog.outputs.latest_release_tag_name }}
+      release_body: ${{ steps.verify_changelog.outputs.changelog_parser_description }}
+
+  # todo - remove this job once versioning is fully automated by cmake
+  check_versions:
+    name: Check Versions
+    runs-on: ubuntu-latest
+    needs: check_changelog
+    if: ${{ github.ref == 'refs/heads/master' || github.base_ref == 'master' }}
+    # base_ref for pull request check, ref for push
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Release
-        id: setup_release
-        uses: LizardByte/setup-release-action@v2024.725.234618
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Check CMakeLists.txt Version
+        run: |
+          version=$(grep -o -E '^project\(Sunshine VERSION [0-9]+\.[0-9]+\.[0-9]+' CMakeLists.txt | \
+            grep -o -E '[0-9]+\.[0-9]+\.[0-9]+')
+          echo "cmakelists_version=${version}" >> $GITHUB_ENV
+
+      - name: Compare CMakeList.txt Version
+        if: ${{ env.cmakelists_version != needs.check_changelog.outputs.next_version_bare }}
+        run: |
+          echo CMakeLists version: "$cmakelists_version"
+          echo Changelog version: "${{ needs.check_changelog.outputs.next_version_bare }}"
+          echo Within 'CMakeLists.txt' change "project(Sunshine [VERSION $cmakelists_version]" to \
+            "project(Sunshine [VERSION ${{ needs.check_changelog.outputs.next_version_bare }}]"
+          exit 1
+
+  setup_release:
+    name: Setup Release
+    needs: check_changelog
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set release details
+        id: release_details
+        env:
+          RELEASE_BODY: ${{ needs.check_changelog.outputs.release_body }}
+        run: |
+          # determine to create a release or not
+          if [[ $GITHUB_EVENT_NAME == "push" ]]; then
+            RELEASE=true
+          else
+            RELEASE=false
+          fi
+
+          # set the release tag
+          COMMIT=${{ github.sha }}
+          if [[ $GITHUB_REF == refs/heads/master ]]; then
+            TAG="${{ needs.check_changelog.outputs.next_version }}"
+            RELEASE_NAME="${{ needs.check_changelog.outputs.next_version }}"
+            RELEASE_BODY="$RELEASE_BODY"
+            PRE_RELEASE="false"
+          elif [[ $GITHUB_REF == refs/heads/nightly ]]; then
+            TAG="nightly-dev"
+            RELEASE_NAME="nightly"
+            RELEASE_BODY="automated nightly release - $(date -u +'%Y-%m-%dT%H:%M:%SZ') - ${COMMIT}"
+            PRE_RELEASE="true"
+          fi
+
+          echo "create_release=${RELEASE}" >> $GITHUB_OUTPUT
+          echo "release_tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "release_commit=${COMMIT}" >> $GITHUB_OUTPUT
+          echo "release_name=${RELEASE_NAME}" >> $GITHUB_OUTPUT
+          echo "pre_release=${PRE_RELEASE}" >> $GITHUB_OUTPUT
+
+          # this is stupid but works for multiline strings
+          echo "RELEASE_BODY<<EOF" >> $GITHUB_ENV
+          echo "$RELEASE_BODY" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+    outputs:
+      create_release: ${{ steps.release_details.outputs.create_release }}
+      release_tag: ${{ steps.release_details.outputs.release_tag }}
+      release_commit: ${{ steps.release_details.outputs.release_commit }}
+      release_name: ${{ steps.release_details.outputs.release_name }}
+      release_body: ${{ env.RELEASE_BODY }}
+      pre_release: ${{ steps.release_details.outputs.pre_release }}
 
   setup_flatpak_matrix:
     name: Setup Flatpak Matrix
@@ -54,7 +131,7 @@ jobs:
         # https://www.cynkra.com/blog/2020-12-23-dynamic-gha
         run: |
           # determine which architectures to build
-          if [[ "${{ github.event_name }}" == "push" ]]; then
+          if [[ $GITHUB_EVENT_NAME == "push" ]]; then
             matrix=$((
               echo '{ "arch" : ["x86_64", "aarch64"] }'
             ) | jq -c .)
@@ -72,8 +149,6 @@ jobs:
       matrix: ${{ steps.flatpak_matrix.outputs.matrix }}
 
   build_linux_flatpak:
-    env:
-      APP_ID: dev.lizardbyte.app.Sunshine
     name: Linux Flatpak
     runs-on: ubuntu-22.04
     needs: [setup_release, setup_flatpak_matrix]
@@ -83,7 +158,7 @@ jobs:
 
     steps:
       - name: Maximize build space
-        uses: easimon/maximize-build-space@v10
+        uses: easimon/maximize-build-space@v8
         with:
           root-reserve-mb: 10240
           remove-dotnet: 'true'
@@ -98,9 +173,9 @@ jobs:
           submodules: recursive
 
       - name: Setup Dependencies Linux Flatpak
-        env:
-          PLATFORM_VERSION: "22.08"
         run: |
+          PLATFORM_VERSION=22.08
+
           sudo apt-get update -y
           sudo apt-get install -y \
             cmake \
@@ -119,7 +194,7 @@ jobs:
             "
 
       - name: Cache Flatpak build
-        uses: actions/cache@v4
+        uses: actions/cache@v3
         with:
           path: ./build/.flatpak-builder
           key: flatpak-${{ matrix.arch }}-${{ github.sha }}
@@ -129,18 +204,18 @@ jobs:
       - name: Configure Flatpak Manifest
         run: |
           # variables for manifest
-          branch="${{ github.head_ref }}"
-          commit=${{ needs.setup_release.outputs.release_commit }}
+          branch=${GITHUB_HEAD_REF}
 
           # check the branch variable
           if [ -z "$branch" ]
           then
             echo "This is a PUSH event"
             branch=${{ github.ref_name }}
-            build_version=${{ needs.setup_release.outputs.release_tag }}
+            commit=${{ github.sha }}
             clone_url=${{ github.event.repository.clone_url }}
           else
             echo "This is a PR event"
+            commit=${{ github.event.pull_request.head.sha }}
             clone_url=${{ github.event.pull_request.head.repo.clone_url }}
           fi
           echo "Branch: ${branch}"
@@ -152,82 +227,26 @@ jobs:
 
           cd build
           cmake -DGITHUB_CLONE_URL=${clone_url} \
-            -DBUILD_VERSION=${build_version} \
             -DGITHUB_BRANCH=${branch} \
             -DGITHUB_COMMIT=${commit} \
             -DSUNSHINE_CONFIGURE_FLATPAK_MAN=ON \
             -DSUNSHINE_CONFIGURE_ONLY=ON \
             ..
 
-      - name: Debug Manifest
-        working-directory: build
-        run: |
-          cat ${APP_ID}.yml
-
       - name: Build Linux Flatpak
         working-directory: build
         run: |
-          sudo su $(whoami) -c "flatpak run org.flatpak.Builder --arch=${{ matrix.arch }} --repo=repo --force-clean \
-            --stop-at=cuda build-sunshine ${APP_ID}.yml"
+          sudo su $(whoami) -c 'flatpak run org.flatpak.Builder --arch=${{ matrix.arch }} --repo=repo --force-clean \
+            --stop-at=cuda build-sunshine dev.lizardbyte.sunshine.yml'
           cp -r .flatpak-builder copy-of-flatpak-builder
-          sudo su $(whoami) -c "flatpak run org.flatpak.Builder --arch=${{ matrix.arch }} --repo=repo --force-clean \
-            build-sunshine ${APP_ID}.yml"
+          sudo su $(whoami) -c 'flatpak run org.flatpak.Builder --arch=${{ matrix.arch }} --repo=repo --force-clean \
+            build-sunshine dev.lizardbyte.sunshine.yml'
           rm -rf .flatpak-builder
           mv copy-of-flatpak-builder .flatpak-builder
-          sudo su $(whoami) -c "flatpak build-bundle --arch=${{ matrix.arch }} ./repo \
-            ../artifacts/sunshine_${{ matrix.arch }}.flatpak ${APP_ID}"
-          sudo su $(whoami) -c "flatpak build-bundle --runtime --arch=${{ matrix.arch }} ./repo \
-            ../artifacts/sunshine_debug_${{ matrix.arch }}.flatpak ${APP_ID}.Debug"
-
-      - name: Lint Flatpak
-        working-directory: build
-        run: |
-          echo "Linting flatpak manifest"
-          flatpak run --command=flatpak-builder-lint org.flatpak.Builder \
-            manifest ${APP_ID}.yml > _flatpak-lint-exceptions_manifest.json || true
-
-          echo "Linting flatpak repo"
-          # TODO: add arg
-          # --mirror-screenshots-url=https://dl.flathub.org/media \
-          flatpak run --command=flatpak-builder-lint org.flatpak.Builder \
-            repo repo > _flatpak-lint-exceptions_repo.json || true
-
-          checks=(manifest repo)
-          exit_code=0
-
-          # check if files are equal
-          for check in "${checks[@]}"; do
-            echo "Validating $check"
-
-            # load baseline and result files
-            baseline="${{ github.workspace }}/packaging/linux/flatpak/flatpak-lint-baseline_${check}.json"
-            result="_flatpak-lint-exceptions_${check}.json"
-
-            # Extract errors from both JSON files
-            readarray -t result_errors < <(jq -r '.errors[]' "$result")
-            readarray -t baseline_errors < <(jq -r '.errors[]' "$baseline")
-
-            # Loop through result errors and check against baseline errors
-            for error in "${result_errors[@]}"; do
-              if printf '%s\n' "${baseline_errors[@]}" | grep -q -F "$error"; then
-                echo "::warning:: '$error'"
-              else
-                echo "::error:: '$error'"
-                exit_code=1
-              fi
-            done
-          done
-
-          # if exit code is not 0, print results
-          if [ $exit_code -ne 0 ]; then
-            echo "Manifest lint results:"
-            cat _flatpak-lint-exceptions_manifest.json
-            echo "Repo lint results:"
-            cat _flatpak-lint-exceptions_repo.json
-          fi
-
-          # exit with the correct code
-          exit $exit_code
+          sudo su $(whoami) -c 'flatpak build-bundle --arch=${{ matrix.arch }} ./repo \
+            ../artifacts/sunshine_${{ matrix.arch }}.flatpak dev.lizardbyte.sunshine'
+          sudo su $(whoami) -c 'flatpak build-bundle --runtime --arch=${{ matrix.arch }} ./repo \
+            ../artifacts/sunshine_debug_${{ matrix.arch }}.flatpak dev.lizardbyte.sunshine.Debug'
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
@@ -236,33 +255,34 @@ jobs:
           path: artifacts/
 
       - name: Create/Update GitHub Release
-        if: ${{ needs.setup_release.outputs.publish_release == 'true' }}
-        uses: LizardByte/create-release-action@v2024.614.221009
+        if: ${{ needs.setup_release.outputs.create_release == 'true' }}
+        uses: ncipollo/release-action@v1
         with:
+          name: ${{ needs.setup_release.outputs.release_name }}
+          tag: ${{ needs.setup_release.outputs.release_tag }}
+          commit: ${{ needs.setup_release.outputs.release_commit }}
+          artifacts: "*artifacts/*"
+          token: ${{ secrets.GH_BOT_TOKEN }}
           allowUpdates: true
           body: ${{ needs.setup_release.outputs.release_body }}
           discussionCategory: announcements
-          generateReleaseNotes: ${{ needs.setup_release.outputs.release_generate_release_notes }}
-          name: ${{ needs.setup_release.outputs.release_tag }}
-          prerelease: true
-          tag: ${{ needs.setup_release.outputs.release_tag }}
-          token: ${{ secrets.GH_BOT_TOKEN }}
+          prerelease: ${{ needs.setup_release.outputs.pre_release }}
 
   build_linux:
     name: Linux ${{ matrix.type }}
     runs-on: ubuntu-${{ matrix.dist }}
-    needs: [setup_release]
+    needs: [check_changelog, setup_release]
     strategy:
       fail-fast: false  # false to test all, true to fail entire job if any fail
       matrix:
         include:  # package these differently
           - type: AppImage
             EXTRA_ARGS: '-DSUNSHINE_BUILD_APPIMAGE=ON'
-            dist: 22.04
+            dist: 20.04
 
     steps:
       - name: Maximize build space
-        uses: easimon/maximize-build-space@v10
+        uses: easimon/maximize-build-space@v8
         with:
           root-reserve-mb: 30720
           remove-dotnet: 'true'
@@ -301,43 +321,39 @@ jobs:
           # allow newer gcc
           sudo add-apt-repository ppa:ubuntu-toolchain-r/test -y
 
-          # allow libfuse2 for appimage on 22.04
-          sudo add-apt-repository universe
-
-          # libx11-xcb-dev and libxcb-dri3-dev are required for building libva
           sudo apt-get install -y \
             build-essential \
             cmake \
-            doxygen \
-            graphviz \
             gcc-10 \
             g++-10 \
             libayatana-appindicator3-dev \
             libavdevice-dev \
+            libboost-filesystem-dev \
+            libboost-locale-dev \
+            libboost-log-dev \
+            libboost-program-options-dev \
             libcap-dev \
             libcurl4-openssl-dev \
             libdrm-dev \
             libevdev-dev \
-            libfuse2 \
             libminiupnpc-dev \
+            libmfx-dev \
             libnotify-dev \
             libnuma-dev \
             libopus-dev \
             libpulse-dev \
             libssl-dev \
+            libva-dev \
             libvdpau-dev \
             libwayland-dev \
             libx11-dev \
-            libx11-xcb-dev \
-            libxcb-dri3-dev \
             libxcb-shm0-dev \
             libxcb-xfixes0-dev \
             libxcb1-dev \
             libxfixes-dev \
             libxrandr-dev \
             libxtst-dev \
-            python3 \
-            python3-venv
+            python3
 
           # clean apt cache
           sudo apt-get clean
@@ -358,30 +374,12 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Build latest libva
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        timeout-minutes: 5
-        run: |
-          gh release download --archive=tar.gz --repo=intel/libva
-          tar xzf libva-*.tar.gz && rm libva-*.tar.gz
-          cd libva-*
-          ./autogen.sh --prefix=/usr --libdir=/usr/lib/x86_64-linux-gnu \
-            --enable-drm \
-            --enable-x11 \
-            --enable-glx \
-            --enable-wayland \
-            --without-legacy # emgd, nvctrl, fglrx
-          make -j $(nproc)
-          sudo make install
-          cd .. && rm -rf libva-*
-
       - name: Build Linux
         env:
           BRANCH: ${{ github.head_ref || github.ref_name }}
-          BUILD_VERSION: ${{ needs.setup_release.outputs.release_tag }}
-          COMMIT: ${{ needs.setup_release.outputs.release_commit }}
-        timeout-minutes: 10
+          BUILD_VERSION: ${{ needs.check_changelog.outputs.next_version_bare }}
+          COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+        timeout-minutes: 5
         run: |
           echo "nproc: $(nproc)"
 
@@ -406,9 +404,10 @@ jobs:
 
       - name: Set AppImage Version
         if: |
-          matrix.type == 'AppImage'
+          matrix.type == 'AppImage' &&
+          (needs.check_changelog.outputs.next_version_bare != needs.check_changelog.outputs.last_version)
         run: |
-          version=${{ needs.setup_release.outputs.release_tag }}
+          version=${{ needs.check_changelog.outputs.next_version_bare }}
           echo "VERSION=${version}" >> $GITHUB_ENV
 
       - name: Package Linux - AppImage
@@ -451,7 +450,7 @@ jobs:
           # permissions
           chmod +x ../artifacts/sunshine.AppImage
 
-      - name: Delete CUDA
+      - name: Delete cuda
         # free up space on the runner
         run: |
           sudo rm -rf /usr/local/cuda
@@ -474,6 +473,9 @@ jobs:
         run: |
           sudo apt-get update -y
           sudo apt-get install -y \
+            doxygen \
+            graphviz \
+            python3-venv \
             x11-xserver-utils \
             xvfb
 
@@ -487,7 +489,6 @@ jobs:
         run: |
           export DISPLAY=:1
           Xvfb ${DISPLAY} -screen 0 1024x768x24 &
-          sleep 5  # give Xvfb time to start
 
           ./test_sunshine --gtest_color=yes
 
@@ -499,44 +500,37 @@ jobs:
         run: |
           ${{ steps.python.outputs.python-path }} -m pip install gcovr
           ${{ steps.python.outputs.python-path }} -m gcovr -r .. \
-            --exclude-noncode-lines \
-            --exclude-throw-branches \
-            --exclude-unreachable-branches \
             --exclude '.*tests/.*' \
-            --exclude '.*third-party/.*' \
+            --exclude '.*tests/.*' \
             --xml-pretty \
             -o coverage.xml
 
       - name: Upload coverage
         # any except canceled or skipped
-        if: >-
-          always() &&
-          (steps.test_report.outcome == 'success') &&
-          startsWith(github.repository, 'LizardByte/')
+        if: always() && (steps.test_report.outcome == 'success')
         uses: codecov/codecov-action@v4
         with:
-          disable_search: true
           fail_ci_if_error: true
           files: ./build/coverage.xml
           flags: ${{ runner.os }}
           token: ${{ secrets.CODECOV_TOKEN }}
-          verbose: true
 
       - name: Create/Update GitHub Release
-        if: ${{ needs.setup_release.outputs.publish_release == 'true' }}
-        uses: LizardByte/create-release-action@v2024.614.221009
+        if: ${{ needs.setup_release.outputs.create_release == 'true' }}
+        uses: ncipollo/release-action@v1
         with:
+          name: ${{ needs.setup_release.outputs.release_name }}
+          tag: ${{ needs.setup_release.outputs.release_tag }}
+          commit: ${{ needs.setup_release.outputs.release_commit }}
+          artifacts: "*artifacts/*"
+          token: ${{ secrets.GH_BOT_TOKEN }}
           allowUpdates: true
           body: ${{ needs.setup_release.outputs.release_body }}
           discussionCategory: announcements
-          generateReleaseNotes: ${{ needs.setup_release.outputs.release_generate_release_notes }}
-          name: ${{ needs.setup_release.outputs.release_tag }}
-          prerelease: true
-          tag: ${{ needs.setup_release.outputs.release_tag }}
-          token: ${{ secrets.GH_BOT_TOKEN }}
+          prerelease: ${{ needs.setup_release.outputs.pre_release }}
 
-  build_homebrew:
-    needs: [setup_release]
+  build_mac_brew:
+    needs: [check_changelog, setup_release]
     strategy:
       fail-fast: false  # false to test all, true to fail entire job if any fail
       matrix:
@@ -544,69 +538,48 @@ jobs:
           # https://docs.github.com/en/actions/using-github-hosted-runners/about-github-hosted-runners/about-github-hosted-runners#standard-github-hosted-runners-for-public-repositories
           # while GitHub has larger macOS runners, they are not available for our repos :(
           - os_version: "12"
-            os_name: "macos"
-          - os_version: "13"
-            os_name: "macos"
-          - os_version: "14"
-            os_name: "macos"
-          - os_version: "latest"
-            os_name: "ubuntu"
-          - os_version: "latest"  # this job will only configure the formula for release, no validation
-            os_name: "ubuntu"
             release: true
-    name: Homebrew (${{ matrix.os_name }}-${{ matrix.os_version }}${{ matrix.release == true && ' (Release)' || '' }})
-    runs-on: ${{ matrix.os_name }}-${{ matrix.os_version }}
+          - os_version: "13"
+          - os_version: "14"
+    name: Homebrew (macOS-${{ matrix.os_version }})
+    runs-on: macos-${{ matrix.os_version }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Dependencies Homebrew
+        run: |
+          # install dependencies using homebrew
+          brew install cmake
+
       - name: Configure formula
         run: |
           # variables for formula
-          branch="${{ github.head_ref }}"
-          commit=${{ needs.setup_release.outputs.release_commit }}
+          branch=${GITHUB_HEAD_REF}
 
           # check the branch variable
           if [ -z "$branch" ]
           then
             echo "This is a PUSH event"
-            build_version=${{ needs.setup_release.outputs.release_tag }}
             clone_url=${{ github.event.repository.clone_url }}
             branch="${{ github.ref_name }}"
             default_branch="${{ github.event.repository.default_branch }}"
-
-            if [ "${{ matrix.release }}" == "true" ]; then
-              # we will publish the formula with the release tag
-              tag="${{ needs.setup_release.outputs.release_tag }}"
-              version="${{ needs.setup_release.outputs.release_version }}"
-            else
-              tag="${{ github.ref_name }}"
-              version="0.0.${{ github.run_number }}"
-            fi
           else
             echo "This is a PR event"
-            build_version="0.0.${{ github.event.number }}"
             clone_url=${{ github.event.pull_request.head.repo.clone_url }}
             branch="${{ github.event.pull_request.head.ref }}"
             default_branch="${{ github.event.pull_request.head.repo.default_branch }}"
-            tag="${{ github.event.pull_request.head.ref }}"
-            version="0.0.${{ github.event.number }}"
           fi
           echo "Branch: ${branch}"
           echo "Clone URL: ${clone_url}"
-          echo "Tag: ${tag}"
 
           mkdir build
           cd build
           cmake \
-            -DBUILD_VERSION="${build_version}" \
-            -DFORMULA_VERSION="${version}" \
             -DGITHUB_BRANCH="${branch}" \
-            -DGITHUB_COMMIT="${commit}" \
             -DGITHUB_CLONE_URL="${clone_url}" \
             -DGITHUB_DEFAULT_BRANCH="${default_branch}" \
-            -DGITHUB_TAG="${tag}" \
             -DSUNSHINE_CONFIGURE_HOMEBREW=ON \
             -DSUNSHINE_CONFIGURE_ONLY=ON \
             ..
@@ -626,50 +599,32 @@ jobs:
           name: sunshine-homebrew
           path: homebrew/
 
-      - name: Setup Xvfb
-        if: |
-          matrix.release != true &&
-          runner.os == 'Linux'
+      - name: Should Publish Homebrew Formula
+        id: homebrew_publish
         run: |
-          sudo apt-get update -y
-          sudo apt-get install -y \
-            xvfb
+          PUBLISH=false
+          if [[ \
+            "${{ matrix.release }}" == "true" && \
+            "${{ github.repository_owner }}" == "LizardByte" && \
+            "${{ needs.setup_release.outputs.create_release }}" == "true" && \
+            "${{ github.ref }}" == "refs/heads/master" \
+          ]]; then
+            PUBLISH=true
+          fi
 
-          export DISPLAY=:1
-          Xvfb ${DISPLAY} -screen 0 1024x768x24 &
+          echo "publish=${PUBLISH}" >> $GITHUB_OUTPUT
 
-          echo "DISPLAY=${DISPLAY}" >> $GITHUB_ENV
-
-      - name: Validate Homebrew Formula
-        if: |
-          matrix.release != true
-        uses: LizardByte/homebrew-release-action@v2024.612.21058
+      - name: Validate and Publish Homebrew Formula
+        uses: LizardByte/homebrew-release-action@v2024.409.24405
         with:
           formula_file: ${{ github.workspace }}/homebrew/sunshine.rb
           git_email: ${{ secrets.GH_BOT_EMAIL }}
           git_username: ${{ secrets.GH_BOT_NAME }}
-          publish: false
-          token: ${{ secrets.GH_BOT_TOKEN }}
-          validate: true
-
-      - name: Create/Update GitHub Release
-        if: >-
-          matrix.release &&
-          needs.setup_release.outputs.publish_release == 'true'
-        uses: LizardByte/create-release-action@v2024.614.221009
-        with:
-          allowUpdates: true
-          artifacts: '${{ github.workspace }}/homebrew/*'
-          body: ${{ needs.setup_release.outputs.release_body }}
-          discussionCategory: announcements
-          generateReleaseNotes: ${{ needs.setup_release.outputs.release_generate_release_notes }}
-          name: ${{ needs.setup_release.outputs.release_tag }}
-          prerelease: true
-          tag: ${{ needs.setup_release.outputs.release_tag }}
+          publish: ${{ steps.homebrew_publish.outputs.publish }}
           token: ${{ secrets.GH_BOT_TOKEN }}
 
   build_mac_port:
-    needs: [setup_release]
+    needs: [check_changelog, setup_release]
     strategy:
       fail-fast: false  # false to test all, true to fail entire job if any fail
       matrix:
@@ -714,18 +669,17 @@ jobs:
       - name: Configure Portfile
         run: |
           # variables for Portfile
-          branch="${{ github.head_ref }}"
-          commit=${{ needs.setup_release.outputs.release_commit }}
+          branch=${GITHUB_HEAD_REF}
 
           # check the branch variable
           if [ -z "$branch" ]
           then
             echo "This is a PUSH event"
-            branch="${{ github.ref_name }}"
-            build_version=${{ needs.setup_release.outputs.release_tag }}
+            commit=${{ github.sha }}
             clone_url=${{ github.event.repository.clone_url }}
           else
             echo "This is a PR event"
+            commit=${{ github.event.pull_request.head.sha }}
             clone_url=${{ github.event.pull_request.head.repo.clone_url }}
           fi
           echo "Commit: ${commit}"
@@ -734,8 +688,6 @@ jobs:
           mkdir build
           cd build
           cmake \
-            -DBUILD_VERSION=${build_version} \
-            -DGITHUB_BRANCH=${branch} \
             -DGITHUB_COMMIT=${commit} \
             -DGITHUB_CLONE_URL=${clone_url} \
             -DSUNSHINE_CONFIGURE_PORTFILE=ON \
@@ -807,42 +759,19 @@ jobs:
           name: sunshine-macports
           path: artifacts/
 
-      - name: Fix permissions
+      - name: Fix screen capture permissions
+        if: ${{ matrix.os_version != 12 }}  # macOS-12 is okay
+        # can be removed if the following is fixed in the runner image
+        # https://github.com/actions/runner-images/issues/9529
+        # https://github.com/actions/runner-images/pull/9530
         run: |
           # https://apple.stackexchange.com/questions/362865/macos-list-apps-authorized-for-full-disk-access
-          # https://github.com/actions/runner-images/issues/9529
-          # https://github.com/actions/runner-images/pull/9530
 
-          # function to execute sql query for each value
-          function execute_sql_query {
-            local value=$1
-            local dbPath=$2
-
-            echo "Executing SQL query for value: $value"
-            sudo sqlite3 "$dbPath" "INSERT OR IGNORE INTO access VALUES($value);"
-          }
-
-          # Find all provisioner paths and store them in an array
-          readarray -t provisioner_paths < <(sudo find /opt /usr -name provisioner)
-          echo "Provisioner paths: ${provisioner_paths[@]}"
-
-          # Create an empty array
-          declare -a values=()
-
-          # Loop through the provisioner paths and add them to the values array
-          for p_path in "${provisioner_paths[@]}"; do
-            # Adjust the service name and other parameters as needed
-            values+=("'kTCCServiceAccessibility','${p_path}',1,2,4,1,NULL,NULL,0,'UNUSED',NULL,NULL,1592919552")
-            values+=("'kTCCServiceScreenCapture','${p_path}',1,2,4,1,NULL,NULL,0,'UNUSED',NULL,0,1687786159")
-          done
-
-          echo "Values: ${values[@]}"
-
+          # permissions for screen capture
+          values="'kTCCServiceScreenCapture','/opt/off/opt/runner/provisioner/provisioner',1,2,4,1,NULL,NULL,0,'UNUSED',NULL,0,1687786159"
           if [[ "${{ matrix.os_version }}" == "14" ]]; then
             # TCC access table in Sonoma has extra 4 columns: pid, pid_version, boot_uuid, last_reminded
-            for i in "${!values[@]}"; do
-              values[$i]="${values[$i]},NULL,NULL,'UNUSED',${values[$i]##*,}"
-            done
+            values="${values},NULL,NULL,'UNUSED',${values##*,}"
           fi
 
           # system and user databases
@@ -851,28 +780,32 @@ jobs:
             "$HOME/Library/Application Support/com.apple.TCC/TCC.db"
           )
 
-          for value in "${values[@]}"; do
-            for dbPath in "${dbPaths[@]}"; do
-              echo "Column names for $dbPath"
-              echo "-------------------"
-              sudo sqlite3 "$dbPath" "PRAGMA table_info(access);"
-              echo "Current permissions for $dbPath"
-              echo "-------------------"
-              sudo sqlite3 "$dbPath" "SELECT * FROM access WHERE service='kTCCServiceScreenCapture';"
-              execute_sql_query "$value" "$dbPath"
-              echo "Updated permissions for $dbPath"
-              echo "-------------------"
-              sudo sqlite3 "$dbPath" "SELECT * FROM access WHERE service='kTCCServiceScreenCapture';"
-            done
+          sqlQuery="INSERT OR IGNORE INTO access VALUES($values);"
+
+          for dbPath in "${dbPaths[@]}"; do
+            echo "Column names for $dbPath"
+            echo "-------------------"
+            sudo sqlite3 "$dbPath" "PRAGMA table_info(access);"
+            echo "Current permissions for $dbPath"
+            echo "-------------------"
+            sudo sqlite3 "$dbPath" "SELECT * FROM access WHERE service='kTCCServiceScreenCapture';"
+            sudo sqlite3 "$dbPath" "$sqlQuery"
+            echo "Updated permissions for $dbPath"
+            echo "-------------------"
+            sudo sqlite3 "$dbPath" "SELECT * FROM access WHERE service='kTCCServiceScreenCapture';"
           done
 
       - name: Run tests
         id: test
         timeout-minutes: 10
-        working-directory:
-          /opt/local/var/macports/build/_Users_runner_work_Sunshine_Sunshine_ports_multimedia_Sunshine/Sunshine/work/build/tests
         run: |
-          sudo ./test_sunshine --gtest_color=yes
+          sudo port test "Sunshine"
+
+      - name: Test Logs
+        if: always()
+        run: |
+          logfile="/opt/local/var/macports/logs/_Users_runner_work_Sunshine_Sunshine_ports_multimedia_Sunshine/Sunshine/main.log"
+          cat "$logfile"
 
       - name: Generate gcov report
         # any except canceled or skipped
@@ -890,9 +823,6 @@ jobs:
           cd ${build_dir}
           ${{ steps.python.outputs.python-path }} -m pip install gcovr
           sudo ${{ steps.python.outputs.python-path }} -m gcovr -r ../${dir} \
-            --exclude-noncode-lines \
-            --exclude-throw-branches \
-            --exclude-unreachable-branches \
             --exclude '.*${dir}/tests/.*' \
             --exclude '.*${dir}/third-party/.*' \
             --gcov-object-directory $(pwd) \
@@ -902,36 +832,32 @@ jobs:
 
       - name: Upload coverage
         # any except canceled or skipped
-        if: >-
-          always() &&
-          (steps.test_report.outcome == 'success') &&
-          startsWith(github.repository, 'LizardByte/')
+        if: always() && (steps.test_report.outcome == 'success')
         uses: codecov/codecov-action@v4
         with:
-          disable_search: true
           fail_ci_if_error: false  # todo: re-enable this when action is fixed
           files: ./build/coverage.xml
           flags: ${{ runner.os }}-${{ matrix.os_version }}
           token: ${{ secrets.CODECOV_TOKEN }}
-          verbose: true
 
       - name: Create/Update GitHub Release
-        if: ${{ needs.setup_release.outputs.publish_release == 'true' }}
-        uses: LizardByte/create-release-action@v2024.614.221009
+        if: ${{ needs.setup_release.outputs.create_release == 'true' && matrix.release }}
+        uses: ncipollo/release-action@v1
         with:
+          name: ${{ needs.setup_release.outputs.release_name }}
+          tag: ${{ needs.setup_release.outputs.release_tag }}
+          commit: ${{ needs.setup_release.outputs.release_commit }}
+          artifacts: "*artifacts/*"
+          token: ${{ secrets.GH_BOT_TOKEN }}
           allowUpdates: true
           body: ${{ needs.setup_release.outputs.release_body }}
           discussionCategory: announcements
-          generateReleaseNotes: ${{ needs.setup_release.outputs.release_generate_release_notes }}
-          name: ${{ needs.setup_release.outputs.release_tag }}
-          prerelease: true
-          tag: ${{ needs.setup_release.outputs.release_tag }}
-          token: ${{ secrets.GH_BOT_TOKEN }}
+          prerelease: ${{ needs.setup_release.outputs.pre_release }}
 
   build_win:
     name: Windows
     runs-on: windows-2019
-    needs: [setup_release]
+    needs: [check_changelog, setup_release]
 
     steps:
       - name: Checkout
@@ -1046,59 +972,30 @@ jobs:
       - name: Setup Dependencies Windows
         uses: msys2/setup-msys2@v2
         with:
-          msystem: ucrt64
           update: true
           install: >-
+            base-devel
+            diffutils
+            doxygen
+            git
+
+            make
+            mingw-w64-x86_64-binutils
+            mingw-w64-x86_64-boost
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-curl
+            mingw-w64-x86_64-graphviz
+            mingw-w64-x86_64-miniupnpc
+            mingw-w64-x86_64-nlohmann-json
+            mingw-w64-x86_64-nodejs
+            mingw-w64-x86_64-nsis
+            mingw-w64-x86_64-onevpl
+            mingw-w64-x86_64-openssl
+            mingw-w64-x86_64-opus
+            mingw-w64-x86_64-toolchain
+            nasm
             wget
-
-      - name: Update Windows dependencies
-        shell: msys2 {0}
-        run: |
-          # download working curl
-          wget https://repo.msys2.org/mingw/ucrt64/mingw-w64-ucrt-x86_64-curl-8.8.0-1-any.pkg.tar.zst
-
-          # install dependencies
-          pacman -U --noconfirm mingw-w64-ucrt-x86_64-curl-8.8.0-1-any.pkg.tar.zst
-          pacman -Syu --noconfirm \
-            --ignore=mingw-w64-ucrt-x86_64-curl \
-            git \
-            mingw-w64-ucrt-x86_64-boost \
-            mingw-w64-ucrt-x86_64-cmake \
-            mingw-w64-ucrt-x86_64-cppwinrt \
-            mingw-w64-ucrt-x86_64-graphviz \
-            mingw-w64-ucrt-x86_64-miniupnpc \
-            mingw-w64-ucrt-x86_64-nlohmann-json \
-            mingw-w64-ucrt-x86_64-nodejs \
-            mingw-w64-ucrt-x86_64-nsis \
-            mingw-w64-ucrt-x86_64-onevpl \
-            mingw-w64-ucrt-x86_64-openssl \
-            mingw-w64-ucrt-x86_64-opus \
-            mingw-w64-ucrt-x86_64-toolchain
-
-      - name: Install Doxygen
-        # GCC compiled doxygen has issues when running graphviz
-        env:
-          DOXYGEN_VERSION: "1.11.0"
-        run: |
-          # Set version variables
-          $doxy_ver = $env:DOXYGEN_VERSION
-          $_doxy_ver = $doxy_ver.Replace(".", "_")
-
-          # Download the Doxygen installer
-          Invoke-WebRequest -Uri `
-            "https://github.com/doxygen/doxygen/releases/download/Release_${_doxy_ver}/doxygen-${doxy_ver}-setup.exe" `
-            -OutFile "doxygen-setup.exe"
-
-          # Run the installer
-          Start-Process `
-            -FilePath .\doxygen-setup.exe `
-            -ArgumentList `
-              '/VERYSILENT' `
-          -Wait `
-          -NoNewWindow
-
-          # Clean up
-          Remove-Item -Path doxygen-setup.exe
+            yasm
 
       - name: Setup python
         # use this instead of msys2 python due to known issues using wheels, https://www.msys2.org/docs/python/
@@ -1122,16 +1019,16 @@ jobs:
         shell: msys2 {0}
         env:
           BRANCH: ${{ github.head_ref || github.ref_name }}
-          BUILD_VERSION: ${{ needs.setup_release.outputs.release_tag }}
-          COMMIT: ${{ needs.setup_release.outputs.release_commit }}
+          BUILD_VERSION: ${{ needs.check_changelog.outputs.next_version_bare }}
+          COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           mkdir build
           cd build
           cmake \
             -DBUILD_WERROR=ON \
             -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-            -DPython_EXECUTABLE='${{ steps.python-path.outputs.python-path }}' \
             -DSUNSHINE_ASSETS_DIR=assets \
+            -DTESTS_PYTHON_EXECUTABLE='${{ steps.python-path.outputs.python-path }}' \
             -DTESTS_SOFTWARE_ENCODER_UNAVAILABLE='skip' \
             -G "MinGW Makefiles" \
             ..
@@ -1167,28 +1064,20 @@ jobs:
         run: |
           ${{ steps.python-path.outputs.python-path }} -m pip install gcovr
           ${{ steps.python-path.outputs.python-path }} -m gcovr -r .. \
-            --exclude-noncode-lines \
-            --exclude-throw-branches \
-            --exclude-unreachable-branches \
             --exclude '.*tests/.*' \
-            --exclude '.*third-party/.*' \
+            --exclude '.*tests/.*' \
             --xml-pretty \
             -o coverage.xml
 
       - name: Upload coverage
         # any except canceled or skipped
-        if: >-
-          always() &&
-          (steps.test_report.outcome == 'success') &&
-          startsWith(github.repository, 'LizardByte/')
+        if: always() && (steps.test_report.outcome == 'success')
         uses: codecov/codecov-action@v4
         with:
-          disable_search: true
           fail_ci_if_error: true
           files: ./build/coverage.xml
           flags: ${{ runner.os }}
           token: ${{ secrets.CODECOV_TOKEN }}
-          verbose: true
 
       - name: Package Windows Debug Info
         working-directory: build
@@ -1210,14 +1099,32 @@ jobs:
           path: artifacts/
 
       - name: Create/Update GitHub Release
-        if: ${{ needs.setup_release.outputs.publish_release == 'true' }}
-        uses: LizardByte/create-release-action@v2024.614.221009
+        if: ${{ needs.setup_release.outputs.create_release == 'true' }}
+        uses: ncipollo/release-action@v1
         with:
+          name: ${{ needs.setup_release.outputs.release_name }}
+          tag: ${{ needs.setup_release.outputs.release_tag }}
+          commit: ${{ needs.setup_release.outputs.release_commit }}
+          artifacts: "*artifacts/*"
+          token: ${{ secrets.GH_BOT_TOKEN }}
           allowUpdates: true
           body: ${{ needs.setup_release.outputs.release_body }}
           discussionCategory: announcements
-          generateReleaseNotes: ${{ needs.setup_release.outputs.release_generate_release_notes }}
-          name: ${{ needs.setup_release.outputs.release_tag }}
-          prerelease: true
-          tag: ${{ needs.setup_release.outputs.release_tag }}
+          prerelease: ${{ needs.setup_release.outputs.pre_release }}
+
+  release-winget:
+    name: Release to WinGet
+    needs: [setup_release, build_win]
+    if: |
+      (github.repository_owner == 'LizardByte' &&
+      needs.setup_release.outputs.create_release == 'true' &&
+      github.ref == 'refs/heads/master')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Release to WinGet
+        uses: vedantmgoyal2009/winget-releaser@v2
+        with:
+          identifier: LizardByte.Sunshine
+          release-tag: ${{ needs.setup_release.outputs.release_tag }}
+          installers-regex: '\.exe$'  # only .exe files
           token: ${{ secrets.GH_BOT_TOKEN }}
