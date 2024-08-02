@@ -594,7 +594,7 @@ jobs:
 
   build_mac_port:
     name: Macports
-    needs: [check_changelog, setup_release]
+    needs: [setup_release]
     runs-on: macos-11
 
     steps:
