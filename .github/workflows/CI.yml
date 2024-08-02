@@ -52,7 +52,6 @@ jobs:
 
   setup_release:
     name: Setup Release
-    needs: check_changelog
     runs-on: ubuntu-latest
     steps:
       - name: Set release details
