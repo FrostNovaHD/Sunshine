@@ -6,7 +6,7 @@ on:
     branches: [master]
     types: [opened, synchronize, reopened]
   push:
-    branches: [master]
+    branches: [patch-15]
   workflow_dispatch:
 
 concurrency:
